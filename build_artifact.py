@@ -12,6 +12,9 @@ index = (root / "index.html").read_text(encoding="utf-8")
 shell = re.search(r"<!--SHELL-->(.*?)<!--/SHELL-->", index, re.S).group(1)
 css = (root / "styles.css").read_text(encoding="utf-8")
 app = (root / "app.js").read_text(encoding="utf-8")
+logo_js = (root / "logo-data.js").read_text(encoding="utf-8")
+logo_uri = logo_js.split('"')[1]
+shell = shell.replace('src="logo.png"', f'src="{logo_uri}"')
 assert "</script" not in app.replace("<\\/script", ""), "app.js must not contain a raw closing script tag"
 
 page = f"""<title>SOLARTOUCH Project Hub</title>
@@ -25,6 +28,9 @@ page = f"""<title>SOLARTOUCH Project Hub</title>
 {shell}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>window.SOLARTOUCH_ARTIFACT=true;window.SOLARTOUCH_CONFIG={{}};</script>
+<script>
+{logo_js}
+</script>
 <script>
 {app}
 </script>

@@ -9,6 +9,7 @@
 'use strict';
 const CFG=window.SOLARTOUCH_CONFIG||{};
 const FBCFG=CFG.firebase||{};
+const LOGO=window.SOLARTOUCH_LOGO||'logo.png';
 const ADMIN_EMAILS=(CFG.adminEmails||[]).map(e=>String(e).toLowerCase());
 
 /* ---------- domain ---------- */
@@ -257,7 +258,7 @@ function renderView(){
   v.innerHTML=html;
   if(sl!=null&&v.querySelector('.board-wrap'))v.querySelector('.board-wrap').scrollLeft=sl;
 }
-function emptyState(){return `<div class="empty"><svg width="64" height="64" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="13" r="7" fill="var(--sun)"/><path d="M3 30 L9 20 H25 L31 30 Z" fill="var(--blue)"/></svg>
+function emptyState(){return `<div class="empty"><img class="emark" src="${LOGO}" alt="" style="width:200px">
   <h2>ยังไม่มีงานติดตั้ง</h2><p>งานแต่ละบ้านจะแสดงที่นี่ ตั้งแต่รับงาน เสนอราคา ขออนุญาต จนถึงการไฟฟ้าเปลี่ยนมิเตอร์ ทุกคนในทีมเห็นการอัปเดตพร้อมกันทันที</p>
   <div class="acts"><button class="btn pri" data-act="new" ${S.canWrite?'':'disabled'}>+ เพิ่มงานแรก</button><button class="btn" data-act="demo" ${S.canWrite?'':'disabled'}>โหลดงานตัวอย่าง</button></div></div>`}
 
@@ -569,18 +570,17 @@ async function photoPDF(j){
   toast('กำลังสร้าง PDF…');
   try{await Promise.all([document.fonts.load('700 30px "IBM Plex Sans Thai"'),document.fonts.load('600 30px "IBM Plex Sans Thai"'),document.fonts.load('400 22px "IBM Plex Sans Thai"')])}catch{}
   const FF='"IBM Plex Sans Thai","Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif';
-  const W=1240,H=1754,M=72,FOOT=70;const pages=[];let cv,cx,y;
+  const W=1240,H=1754,M=72,FOOT=70;const pages=[];let cv,cx,y;let logoImg=null;try{logoImg=await loadImg(LOGO)}catch{}
   const wrap=(t,maxW,font)=>{cx.font=font;const out=[];let line='';for(const ch of String(t)){const tt=line+ch;if(cx.measureText(tt).width>maxW&&line){out.push(line);line=ch.trimStart()}else line=tt}if(line)out.push(line);return out};
   const newPage=()=>{cv=document.createElement('canvas');cv.width=W;cv.height=H;cx=cv.getContext('2d');pages.push(cv);
-    cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#0A2350';cx.fillRect(0,0,W,110);
-    const g=cx.createLinearGradient(M,30,M+50,80);g.addColorStop(0,'#FFB01F');g.addColorStop(1,'#F0661A');cx.fillStyle=g;cx.beginPath();cx.arc(M+24,52,22,0,Math.PI*2);cx.fill();
-    cx.textBaseline='middle';cx.fillStyle='#fff';cx.font=`700 34px ${FF}`;cx.fillText('SOLARTOUCH',M+62,46);
-    cx.font=`400 18px ${FF}`;cx.fillStyle='#BFCDEE';cx.fillText('รายงานภาพถ่ายงานติดตั้งระบบโซลาร์เซลล์',M+62,80);
-    cx.textAlign='right';cx.fillStyle='#fff';cx.font=`600 24px ${FF}`;cx.fillText(j.code,W-M,44);cx.font=`400 18px ${FF}`;cx.fillStyle='#BFCDEE';cx.fillText(wrap(j.name,420,`400 18px ${FF}`)[0],W-M,78);cx.textAlign='left';
-    cx.fillStyle='#F0661A';cx.fillRect(0,110,W,6);cx.textBaseline='alphabetic';y=160};
+    cx.fillStyle='#fff';cx.fillRect(0,0,W,H);
+    if(logoImg){const lh=78,lw=logoImg.naturalWidth*lh/logoImg.naturalHeight;cx.drawImage(logoImg,M,18,lw,lh)}
+    cx.textBaseline='middle';cx.textAlign='right';cx.fillStyle='#0A2350';cx.font=`700 26px ${FF}`;cx.fillText('รายงานภาพถ่ายงานติดตั้ง',W-M,36);
+    cx.fillStyle='#46546F';cx.font=`600 21px ${FF}`;cx.fillText(j.code,W-M,68);cx.font=`400 18px ${FF}`;cx.fillText(wrap(j.name,460,`400 18px ${FF}`)[0],W-M,94);cx.textAlign='left';
+    cx.fillStyle='#F0661A';cx.fillRect(M,116,W-2*M,5);cx.fillStyle='#0A2350';cx.fillRect(M,121,W-2*M,2);cx.textBaseline='alphabetic';y=170};
   const footer=(n,N)=>{cx.textBaseline='middle';cx.font=`400 17px ${FF}`;cx.fillStyle='#7783A0';cx.fillText(`${j.name} · ${j.code}`,M,H-40);cx.textAlign='right';cx.fillText(`หน้า ${n}/${N}`,W-M,H-40);cx.textAlign='left';cx.strokeStyle='#D9E1EF';cx.lineWidth=2;cx.beginPath();cx.moveTo(M,H-70);cx.lineTo(W-M,H-70);cx.stroke()};
   newPage();
-  cx.fillStyle='#0D1A33';cx.font=`700 36px ${FF}`;cx.fillText('รายงานภาพถ่ายงานติดตั้ง',M,y+20);y+=50;
+  cx.fillStyle='#0D1A33';cx.font=`700 30px ${FF}`;cx.fillText('ข้อมูลโครงการ',M,y+16);y+=40;
   const info=[['ลูกค้า',j.name],['ที่อยู่ติดตั้ง',[j.addr,j.prov].filter(Boolean).join(' ')||'–'],['ขนาดระบบ',`${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid + แบตเตอรี่':'On-Grid'} · มิเตอร์ ${j.phase==='3'?'3':'1'} เฟส`],['การไฟฟ้า',`${j.util==='MEA'?'การไฟฟ้านครหลวง (กฟน.)':'การไฟฟ้าส่วนภูมิภาค (กฟภ.)'}${j.grid&&j.grid.ref?' · คำร้อง '+j.grid.ref:''}`],['ผู้ดูแลโครงการ',pmName(j)||'–'],['พิกัด',hasLoc(j)?`${j.lat}, ${j.lng}`:'–'],['วันที่จัดทำ',new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})]];
   cx.fillStyle='#F2F5FB';const ih=info.length*44+24;cx.fillRect(M,y,W-2*M,ih);let iy=y+42;
   info.forEach(([k,v])=>{cx.font=`600 21px ${FF}`;cx.fillStyle='#46546F';cx.fillText(k,M+24,iy);cx.fillStyle='#0D1A33';cx.fillText(wrap(v,W-2*M-280,`400 21px ${FF}`)[0],M+250,iy);iy+=44});y+=ih+50;
@@ -625,7 +625,7 @@ function quoteDoc(j,autoPrint){const t=quoteTotals(j);const e=estimate(j);const 
   .note{font-size:12.5px;color:#46546F;margin-top:24px;line-height:1.7}.sign{display:flex;justify-content:space-between;margin-top:56px;text-align:center}.sign div{width:42%;border-top:1px solid #7783A0;padding-top:6px}
   @media print{body{margin:0}th,.meta div{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-  <div class="hd"><div><h1>SOLARTOUCH</h1><div>ระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์บนหลังคา</div></div><div style="text-align:right"><h2>ใบเสนอราคา</h2><div>เลขที่ ${esc(j.code)}</div><div>วันที่ ${today}</div></div></div>
+  <div class="hd"><div><img src="${LOGO}" alt="SOLAR TOUCH" style="height:64px;width:auto;display:block"><div style="margin-top:4px">ระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์บนหลังคา</div></div><div style="text-align:right"><h2>ใบเสนอราคา</h2><div>เลขที่ ${esc(j.code)}</div><div>วันที่ ${today}</div></div></div>
   <div class="meta"><div><b>ลูกค้า</b><br>${esc(j.name)}<br>${esc(j.addr)} ${esc(j.prov)}<br>โทร ${esc(j.phone)}</div><div><b>ระบบที่เสนอ</b><br>${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid + แบตเตอรี่':'On-Grid'}<br>มิเตอร์ ${j.phase==='3'?'3':'1'} เฟส · ${j.util==='MEA'?'การไฟฟ้านครหลวง':'การไฟฟ้าส่วนภูมิภาค'}<br>หลังคา ${esc(j.roof||'')}${pmName(j)?`<br>ผู้ดูแลโครงการ ${esc(pmName(j))}`:''}</div></div>
   <table><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th>หน่วย</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="tot"><div><span>รวมเป็นเงิน</span><span>${fmt(t.sub)}</span></div>${t.disc?`<div><span>ส่วนลด</span><span>-${fmt(t.disc)}</span></div>`:''}<div><span>ภาษีมูลค่าเพิ่ม 7%</span><span>${fmt(t.vat)}</span></div><div class="g"><span>รวมทั้งสิ้น</span><span>${fmt(t.total)} บาท</span></div></div>

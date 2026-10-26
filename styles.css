@@ -47,7 +47,9 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 /* shell */
 .app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100%}
 .rail{background:var(--rail);color:var(--rail-ink);padding:22px 14px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;height:100dvh}
-.brand{display:flex;align-items:center;gap:10px;padding:0 6px;color:var(--rail-hi)}
+.brand{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:0 2px;color:var(--rail-hi)}
+.brand img{display:block;width:100%;height:auto;background:#fff;border-radius:12px;padding:12px 14px;box-sizing:border-box}
+.brand small{text-align:center}
 .brand svg{flex:none}
 .brand b{font-family:var(--f-display);font-size:18px;letter-spacing:.04em;display:block;line-height:1.1}
 .brand small{font-size:11px;color:var(--rail-ink);letter-spacing:.08em}
@@ -282,7 +284,8 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
   .rail{display:none}
   .top{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   .top h1{display:none}
-  .top .mbrand{display:flex;align-items:center;gap:8px;margin-right:auto;font-family:var(--f-display);font-weight:700;letter-spacing:.04em;color:var(--navy)}
+  .top .mbrand{display:flex;align-items:center;margin-right:auto}
+  .top .mbrand img{height:34px;width:auto;background:#fff;border-radius:8px;padding:3px 6px}
   .top .newbtn{display:none}
   .search{order:5;flex:1 1 100%}
   #view{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -423,3 +426,7 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
 .li.ev b{display:block;white-space:normal}
 .maplist a{color:var(--blue);font-weight:600}
 @media (max-width:900px){.cal{margin-bottom:8px}}
+
+.gate-logo{width:min(300px,80%);height:auto;background:#fff;border-radius:14px;padding:10px 14px}
+.empty .emark{width:72px;height:auto}
+.gate p{overflow-wrap:anywhere}.gate .box{min-width:0;max-width:100%}
