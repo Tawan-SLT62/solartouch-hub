@@ -60,7 +60,7 @@ const KWH_PER_KWP_DAY=3.8, ONLINE_MS=75000, HEARTBEAT_MS=30000;
 const TH_DOW=['อา','จ','อ','พ','พฤ','ศ','ส'];
 
 /* ---------- state ---------- */
-const S={fin:new Map(),bonus:new Map(),settings:null,permsDoc:null,roleMap:{},ownerId:null,previewRole:'',baseWrite:true,payFilter:'open',bMonth:'all',jobs:new Map(),loaded:false,mode:'connecting',view:'dash',open:null,tab:'info',q:'',stageFilter:'',pmFilter:'',
+const S={fin:new Map(),bonus:new Map(),settings:null,permsDoc:null,roleMap:{},ownerId:null,previewRole:'',baseWrite:true,payFilter:'open',bMonth:'all',bTab:'crew',jobs:new Map(),loaded:false,mode:'connecting',view:'dash',open:null,tab:'info',q:'',stageFilter:'',pmFilter:'',
   me:null,email:'',isAdmin:false,member:false,canWrite:true,peers:[],prof:{},team:new Set(),members:[],drawerDirty:false,
   photos:[],photoJob:null,photosLoaded:false,cal:null,calSel:null,mapStage:'',lb:null};
 let BK=null;      // storage backend
@@ -121,7 +121,7 @@ function buildItems(j){
 }
 function jobCode(){const d=new Date();return `ST-${String(d.getFullYear()+543).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${Math.floor(100+Math.random()*900)}`}
 function makeJob(f,extra={}){const now=Date.now();const loc=parseLoc(f.loc);
-  const j={code:jobCode(),name:f.name,phone:f.phone||'',addr:f.addr||'',prov:f.prov||'',util:f.util||'PEA',phase:f.phase||'1',type:f.type||'ongrid',kw:+f.kw||5,roof:f.roof||ROOFS[0],note:'',
+  const j={code:jobCode(),name:f.name,phone:f.phone||'',email:(f.email||'').trim(),addr:f.addr||'',prov:f.prov||'',util:f.util||'PEA',phase:f.phase||'1',type:f.type||'ongrid',kw:+f.kw||5,roof:f.roof||ROOFS[0],note:'',
   lat:loc?loc.lat:null,lng:loc?loc.lng:null,mapUrl:f.loc&&/^https?:/.test(String(f.loc).trim())?String(f.loc).trim():'',
   pm:f.pm&&f.pm!=='_other'?f.pm:null,pmName:f.pm==='_other'?(f.pmName||''):'',
   stage:'lead',stageAt:now,steps:{lead:now},createdAt:now,updatedAt:now,createdBy:S.me,updatedBy:S.me,owner:S.me,
@@ -198,8 +198,8 @@ function demoJobs(){const D=86400000,now=Date.now(),today=new Date();const dd=n=
   const mk=(f,stage,agoD,perm=[],extra={})=>{const j=makeJob(f,{demo:true});const at=now-agoD*D;j.stage=stage;j.stageAt=at;j.createdAt=at-5*D;j.updatedAt=at;j.steps={};STAGES.slice(0,SIDX[stage]+1).forEach((s,i)=>j.steps[s.k]=at-(SIDX[stage]-i)*2*D);perm.forEach(k=>j.permits[k]={done:true,at,by:S.me});j.log=[{t:j.createdAt,by:S.me,m:'สร้างงานใหม่ (ตัวอย่าง)'},{t:at,by:S.me,m:`ย้ายไปขั้น “${STAGES[SIDX[stage]].t}”`}];Object.assign(j,extra);return j};
   const T=[...S.team];
   return[
-    mk({name:'คุณวิภาวรรณ ศรีสุข (ตัวอย่าง)',phone:'081-234-5678',addr:'หมู่บ้านพฤกษา ถ.บางกรวย-ไทรน้อย',prov:'นนทบุรี',util:'PEA',kw:5,phase:'1',type:'ongrid',loc:'13.8621, 100.4153'},'quote',2,[],{pm:T[1]||null,appts:[{id:'a1',date:dd(2),time:'10:00',type:'meet',note:'นำเสนอใบเสนอราคา',who:T[0]||null}]}),
-    mk({name:'คุณธนพล วงศ์ใหญ่ (ตัวอย่าง)',phone:'089-777-1020',addr:'ซ.ลาดพร้าว 101',prov:'กรุงเทพฯ',util:'MEA',kw:10,phase:'3',type:'hybrid',loc:'13.7946, 100.6245'},'permit',9,['idcard','house','bill','struct'],{pm:T[2]||null}),
+    mk({name:'คุณวิภาวรรณ ศรีสุข (ตัวอย่าง)',phone:'081-234-5678',email:'wipawan.s@example.com',addr:'หมู่บ้านพฤกษา ถ.บางกรวย-ไทรน้อย',prov:'นนทบุรี',util:'PEA',kw:5,phase:'1',type:'ongrid',loc:'13.8621, 100.4153'},'quote',2,[],{pm:T[1]||null,appts:[{id:'a1',date:dd(2),time:'10:00',type:'meet',note:'นำเสนอใบเสนอราคา',who:T[0]||null}]}),
+    mk({name:'คุณธนพล วงศ์ใหญ่ (ตัวอย่าง)',phone:'089-777-1020',email:'thanaphon.w@example.com',addr:'ซ.ลาดพร้าว 101',prov:'กรุงเทพฯ',util:'MEA',kw:10,phase:'3',type:'hybrid',loc:'13.7946, 100.6245'},'permit',9,['idcard','house','bill','struct'],{pm:T[2]||null}),
     mk({name:'คุณศิริพร แก้วมณี (ตัวอย่าง)',phone:'086-555-4412',addr:'ต.บ้านสวน อ.เมือง',prov:'ชลบุรี',util:'PEA',kw:5,phase:'1',type:'ongrid',loc:'13.3611, 100.9847'},'grid',4,DOC_KEYS,{pm:T[1]||null,grid:{ref:'PEA-ชบ-0458',submit:dd(-4),inspect:dd(5),meter:''},photos:{overview:2,firmware:1,ct:1,zeroset:0,tie:1,combiner:1}}),
     mk({name:'คุณอนุชา พรหมมา (ตัวอย่าง)',phone:'092-118-3300',addr:'ต.สุเทพ อ.เมือง',prov:'เชียงใหม่',util:'PEA',kw:3,phase:'1',type:'ongrid',loc:'18.8048, 98.9555'},'survey',1,[],{pm:T[2]||null,appts:[{id:'a2',date:dd(1),time:'09:30',type:'survey',note:'วัดหลังคา ถ่ายรูปตู้ MDB',who:T[2]||null}]}),
     mk({name:'คุณประเสริฐ ทองดี (ตัวอย่าง)',phone:'081-440-7788',addr:'ต.ในเมือง อ.เมือง',prov:'ขอนแก่น',util:'PEA',kw:10,phase:'3',type:'ongrid',loc:'16.4419, 102.8360'},'install',2,['idcard','house','bill','struct','local','erc','sld','license','spec'],{pm:T[1]||null,appts:[{id:'a3',date:dd(0),time:'08:00',type:'install',note:'ทีมช่าง 4 คน ติดตั้งแผงวันแรก',who:T[1]||null},{id:'a4',date:dd(3),time:'08:00',type:'install',note:'เดินสาย AC + ทดสอบ',who:T[1]||null}]}),
@@ -210,7 +210,7 @@ async function clearDemo(){const ids=[...S.jobs].filter(([,j])=>j.demo).map(([id
 
 /* ---------- filters ---------- */
 function visibleJobs(){const q=S.q.trim().toLowerCase();let arr=[...S.jobs].map(([id,j])=>({id,...j}));
-  if(q)arr=arr.filter(j=>[j.name,j.phone,j.code,j.prov,j.addr,pmName(j)].join(' ').toLowerCase().includes(q));
+  if(q)arr=arr.filter(j=>[j.name,j.phone,j.email,j.code,j.prov,j.addr,pmName(j)].join(' ').toLowerCase().includes(q));
   if(S.pmFilter)arr=arr.filter(j=>S.pmFilter==='_none'?!j.pm&&!j.pmName:j.pm===S.pmFilter);
   return arr.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))}
 function onlinePeers(){const cut=Date.now()-ONLINE_MS;return S.peers.filter(p=>(p.lastSeen||0)>cut)}
@@ -330,7 +330,7 @@ function listHTML(){let all=visibleJobs();if(S.stageFilter)all=all.filter(j=>j.s
   return `<div class="tools"><button class="chip" data-filter="" aria-pressed="${!S.stageFilter}">ทั้งหมด</button>${STAGES.map(s=>`<button class="chip" data-filter="${s.k}" aria-pressed="${S.stageFilter===s.k}">${esc(s.s)}</button>`).join('')}</div>
   <div class="tools">${pmFilterHTML()}<span style="margin-left:auto"></span>${canDownload()?`<button class="btn sm" data-act="csv">ส่งออก CSV</button>`:''}</div>
   <div class="tbl-wrap"><table><thead><tr><th>รหัสงาน</th><th>ลูกค้า</th><th>จังหวัด</th><th class="r">ขนาด</th><th>ขั้นตอน</th><th>ผู้ดูแลโครงการ</th><th>เอกสาร</th><th>รูป</th><th class="r">มูลค่า (รวม VAT)</th><th>อัปเดต</th></tr></thead><tbody>
-  ${all.map(j=>{const pp=permitProg(j),ph=photoProg(j);return `<tr data-open="${j.id}"><td class="num">${esc(j.code)}</td><td><b>${esc(j.name)}</b><br><span class="muted num" style="font-size:12.5px">${esc(j.phone)}</span></td><td>${esc(j.prov)}${hasLoc(j)?' <svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}</td><td class="r num">${fmt1(j.kw)} kWp</td><td>${stagePill(j.stage)}</td><td>${esc(pmName(j)||'–')}</td><td class="num">${pp.d}/${pp.n}</td><td class="num">${ph.d}/${ph.n}</td><td class="r num">${can('quote.view')?fmt(quoteTotals(j).total):'–'}</td><td class="muted">${ago(j.updatedAt)}</td></tr>`}).join('')||`<tr><td colspan="10" class="muted">ไม่พบงานที่ตรงกับตัวกรอง</td></tr>`}
+  ${all.map(j=>{const pp=permitProg(j),ph=photoProg(j);return `<tr data-open="${j.id}"><td class="num">${esc(j.code)}</td><td><b>${esc(j.name)}</b><br><span class="muted num" style="font-size:12.5px">${esc(j.phone)}</span>${j.email?`<br><span class="muted" style="font-size:12.5px">${esc(j.email)}</span>`:''}</td><td>${esc(j.prov)}${hasLoc(j)?' <svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}</td><td class="r num">${fmt1(j.kw)} kWp</td><td>${stagePill(j.stage)}</td><td>${esc(pmName(j)||'–')}</td><td class="num">${pp.d}/${pp.n}</td><td class="num">${ph.d}/${ph.n}</td><td class="r num">${can('quote.view')?fmt(quoteTotals(j).total):'–'}</td><td class="muted">${ago(j.updatedAt)}</td></tr>`}).join('')||`<tr><td colspan="10" class="muted">ไม่พบงานที่ตรงกับตัวกรอง</td></tr>`}
   </tbody></table></div>`}
 
 /* ---------- calendar ---------- */
@@ -507,6 +507,12 @@ function bonusOf(j){const kw=invKw(j)??invEst(j);const tier=bonusTier(kw);const 
 const monthKey=t=>{const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`};
 const monthTH=k=>{const [y,m]=k.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'})};
 function bonusHTML(){const all=can('bonus.view.all'),own=can('bonus.view.own');if(!all&&!own)return noAccess('โบนัส');
+  const tab=all?(S.bTab||'crew'):'pm';
+  const tabs=all?`<div class="tools"><button class="chip" data-btab="crew" aria-pressed="${tab==='crew'}">ทีมช่างติดตั้ง</button><button class="chip" data-btab="pm" aria-pressed="${tab==='pm'}">ผู้ดูแลโครงการ</button></div>`:'';
+  if(tab==='crew'){const ms=[...new Set(visibleJobs().map(j=>crewBonusOf(j)).filter(c=>c.reached&&c.at).map(c=>monthKey(c.at)))].sort().reverse();const cur=monthKey(Date.now());if(!ms.includes(cur))ms.unshift(cur);const M=S.bMonth||'all';
+    return tabs+`<div class="tools"><label class="inline">เดือนที่ติดตั้งเสร็จ <select class="in sel-sm" id="bMonth"><option value="all" ${M==='all'?'selected':''}>ทุกเดือน</option>${ms.map(k=>`<option value="${k}" ${M===k?'selected':''}>${monthTH(k)}</option>`).join('')}</select></label><span style="margin-left:auto"></span>${pmFilterHTML()}</div>`+crewBonusHTML()}
+  return tabs+pmBonusHTML()}
+function pmBonusHTML(){const all=can('bonus.view.all');
   let jobs=visibleJobs();if(!all)jobs=jobs.filter(j=>j.pm===S.me);
   const items=jobs.map(j=>({j,b:bonusOf(j)}));
   const months=[...new Set(items.filter(x=>x.b.reached).map(x=>monthKey(x.b.at)))].sort().reverse();
@@ -547,6 +553,97 @@ function bonusHTML(){const all=can('bonus.view.all'),own=can('bonus.view.own');i
 function saveTiers(tiers){const t=[...tiers].sort((a,b)=>(+a.upTo>0?+a.upTo:1e9)-(+b.upTo>0?+b.upTo:1e9));return upsert('settings','app',{tiers:t},S.settings).catch(writeErr)}
 function saveBonus(id,data){return upsert('bonus',id,{job:id,...data},S.bonus.get(id)).catch(writeErr)}
 
+/* ---------- installation crew bonus ---------- */
+const CREW_POS=[['lead','หัวหน้าทีม'],['sub','รองหัวหน้าทีม'],['tech','ช่างชำนาญการ'],['help','ผู้ช่วยช่าง']];
+const POS_I=Object.fromEntries(CREW_POS.map(([k],i)=>[k,i]));
+const DEFAULT_CREW_TIERS=[
+  {label:'5–6',upTo:6,exp:'1–2',max:2,smax:1,n:[1000,1000,800,500],s:[1500,1500,1200,800]},
+  {label:'10–12',upTo:12,exp:'2–3',max:3,smax:2,n:[1500,1500,1200,600],s:[2300,2300,1800,1200]},
+  {label:'15',upTo:15,exp:'3',max:3,smax:2,n:[1750,1750,1400,900],s:[2700,2700,2100,1400]},
+  {label:'20',upTo:20,exp:'3–4',max:4,smax:3,n:[2000,2000,1600,1000],s:[3000,3000,2400,1500]}
+];
+const MAX_CREW=8;
+function crewTiers(){const t=(S.settings||{}).crewTiers;return t&&t.length?t:DEFAULT_CREW_TIERS}
+function crewRoster(){return((S.settings||{}).crewRoster)||[]}
+function crewTier(kw){const t=crewTiers();for(let i=0;i<t.length;i++)if(kw<=+t[i].upTo)return{...t[i],i};return{...t[t.length-1],i:t.length-1}}
+function instDays(j){const ins=j.inst||{};if(+ins.days>0)return+ins.days;if(ins.start&&ins.end){const d=Math.round((parseYmd(ins.end)-parseYmd(ins.start))/86400000)+1;return d>0?d:null}return null}
+function crewBonusOf(j){const kw=invKw(j)??invEst(j);const tier=crewTier(kw);const d=instDays(j);
+  let lvl=null;if(d!=null)lvl=d<=+tier.smax?'special':d<=+tier.max?'normal':'over';
+  const rates=lvl==='special'?tier.s:lvl==='normal'?tier.n:null;
+  const crew=(j.crew||[]).filter(c=>c&&c.name);
+  const people=crew.map(c=>({...c,amt:rates?+(rates[POS_I[c.pos]??3]||0):0}));
+  const b=S.bonus.get(j.id)||{};const total=people.reduce((a,p)=>a+p.amt,0);
+  const reached=(SIDX[j.stage]??0)>=SIDX.grid;
+  return{kw,tier,days:d,lvl,people,total:b.crewPaid&&b.crewAmt!=null?+b.crewAmt:total,paid:!!b.crewPaid,paidAt:b.crewPaidAt,reached,at:(j.inst&&j.inst.end)?parseYmd(j.inst.end).getTime():bonusOf(j).at}}
+const LVL={special:['Special','good'],normal:['Normal','blue'],over:['เกิน Max Day · ไม่ได้โบนัส','bad']};
+const lvlPill=l=>l?`<span class="pst pst-${LVL[l][1]}">${LVL[l][0]}</span>`:'<span class="pst pst-muted">ยังไม่ระบุวันติดตั้ง</span>';
+
+function crewTab(j,dis){const cb=crewBonusOf(j);const ins=j.inst||{};const roster=crewRoster();const crew=[...(j.crew||[])];
+  const t=cb.tier;const ed=!dis;
+  return `<div class="sect"><h3>ระยะเวลาติดตั้ง</h3><div class="form">
+    <div class="fld"><label for="in-start">วันเริ่มติดตั้ง</label><input class="in" id="in-start" type="date" data-inst="start" value="${esc(ins.start||'')}" ${dis}></div>
+    <div class="fld"><label for="in-end">วันติดตั้งเสร็จ</label><input class="in" id="in-end" type="date" data-inst="end" value="${esc(ins.end||'')}" ${dis}></div>
+    <div class="fld"><label for="in-days">จำนวนวันทำงานจริง</label><input class="in num" id="in-days" type="number" min="0" step="0.5" data-inst="days" value="${esc(ins.days||'')}" placeholder="${ins.start&&ins.end?'คำนวณ '+instDays({inst:{start:ins.start,end:ins.end}})+' วัน':'นับจากวันที่'}" ${dis}></div>
+    <div class="fld"><label>ขนาด Inverter</label><div class="in" style="display:flex;align-items:center;background:var(--surface-2)">${fmt1(cb.kw)} kW${invKw(j)==null?' (ประมาณ แก้ได้ในแท็บข้อมูล)':''}</div></div>
+  </div>
+  <div class="crewrule"><span>ขั้น <b>${esc(t.label)} kW</b> · คาดหวัง ${esc(t.exp)} วัน</span><span>Special ≤ ${t.smax} วัน · Normal ≤ ${t.max} วัน</span><span>ใช้จริง <b>${cb.days!=null?fmt1(cb.days)+' วัน':'–'}</b></span>${lvlPill(cb.lvl)}</div></div>
+  <div class="sect"><h3>ทีมช่างติดตั้ง <span class="count">${crew.filter(c=>c&&c.name).length}</span></h3>
+  <div class="crewlist">${crew.map((c,i)=>{const amt=cb.lvl&&cb.lvl!=='over'?+((cb.lvl==='special'?t.s:t.n)[POS_I[c.pos]??3]||0):0;
+    return `<div class="crow"><input class="in" id="cr-${i}-name" list="rosterList" data-crew="${i}" data-k="name" value="${esc(c.name||'')}" placeholder="ชื่อช่าง" ${dis}>
+    <select class="in" id="cr-${i}-pos" data-crew="${i}" data-k="pos" ${dis}>${CREW_POS.map(([k,l])=>`<option value="${k}" ${c.pos===k?'selected':''}>${l}</option>`).join('')}</select>
+    <span class="num camt">฿${fmt(amt)}</span>${ed?`<button class="rm" data-rmcrew="${i}" aria-label="ลบช่าง">✕</button>`:''}</div>`}).join('')||'<p class="muted" style="margin:0">ยังไม่ได้กำหนดทีมช่าง</p>'}</div>
+  <datalist id="rosterList">${roster.map(r=>`<option value="${esc(r.name)}">${esc((CREW_POS.find(p=>p[0]===r.pos)||[,''])[1])}</option>`).join('')}</datalist>
+  ${ed?`<div class="acts">${crew.length<MAX_CREW?'<button class="btn sm" data-act="addcrew">+ เพิ่มช่าง</button>':''}${roster.length&&!crew.length?'<button class="btn sm blue" data-act="crewdefault">ใช้รายชื่อช่างประจำทั้งหมด</button>':''}</div>`:''}
+  <div class="tot"><div class="row grand"><span>โบนัสทีมช่างงานนี้</span><span class="num">${fmt(cb.total)} บาท</span></div>${cb.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(cb.paidAt)}</span>`:cb.reached?'<span class="pst pst-blue">ติดตั้งเสร็จแล้ว รอจ่าย</span>':'<span class="pst pst-muted">ถึงกำหนดเมื่อติดตั้งเสร็จ</span>'}</div>
+  <p class="note" style="margin:0">ช่างแต่ละคนได้โบนัสตามตำแหน่งของตัวเอง ทีมละไม่เกิน ${MAX_CREW} คน · พิมพ์ชื่อหรือเลือกจากรายชื่อช่างประจำ</p></div>`}
+function saveCrew(id,crew){return saveJob(id,{crew})}
+
+function crewBonusHTML(){const all=can('bonus.view.all');if(!all)return'';
+  const M=S.bMonth||'all';const pay=can('bonus.pay');
+  const items=visibleJobs().map(j=>({j,c:crewBonusOf(j)}));
+  const done=items.filter(x=>x.c.reached&&(M==='all'||monthKey(x.c.at)===M)).sort((a,b)=>(b.c.at||0)-(a.c.at||0));
+  const unpaid=done.filter(x=>!x.c.paid&&x.c.total>0),paid=done.filter(x=>x.c.paid);
+  const s=a=>a.reduce((t,x)=>t+x.c.total,0);
+  const cnt=l=>done.filter(x=>x.c.lvl===l).length;
+  const ppl={};done.forEach(({j,c})=>c.people.forEach(p=>{const k=p.name.trim();const r=ppl[k]||(ppl[k]={name:k,pos:{},n:0,amt:0,paid:0});r.n++;r.pos[p.pos]=(r.pos[p.pos]||0)+1;r.amt+=p.amt;if(c.paid)r.paid+=p.amt}));
+  const ed=can('settings.edit');const t=crewTiers();
+  return `<div class="kpis">
+    <div class="kpi hero"><span class="lbl">ทีมช่าง · ถึงกำหนดยังไม่จ่าย</span><span class="v num">฿${fmt(s(unpaid))}</span><span class="s">${unpaid.length} งาน</span></div>
+    <div class="kpi"><span class="lbl">จ่ายแล้ว</span><span class="v num" style="color:var(--good)">฿${fmt(s(paid))}</span><span class="s">${paid.length} งาน</span></div>
+    <div class="kpi"><span class="lbl">ได้ระดับ Special</span><span class="v num">${cnt('special')}<small>งาน</small></span><span class="s">Normal ${cnt('normal')} · เกินกำหนด ${cnt('over')}</span></div>
+    <div class="kpi"><span class="lbl">ยังไม่ระบุวันหรือทีม</span><span class="v num">${done.filter(x=>!x.c.lvl||!x.c.people.length).length}<small>งาน</small></span><span class="s">กรอกในแท็บ “ทีมช่าง” ของงาน</span></div>
+  </div>
+  ${Object.keys(ppl).length?`<section class="panel"><h2>สรุปรายช่าง</h2><div class="tbl-wrap"><table><thead><tr><th>ช่าง</th><th>ตำแหน่งที่ทำ</th><th class="r">จำนวนงาน</th><th class="r">โบนัสรวม</th><th class="r">จ่ายแล้ว</th><th class="r">ค้างจ่าย</th></tr></thead><tbody>
+    ${Object.values(ppl).sort((a,b)=>b.amt-a.amt).map(p=>`<tr><td>${avName(p.name,'sm')} ${esc(p.name)}</td><td>${Object.entries(p.pos).map(([k,n])=>`${esc(CREW_POS[POS_I[k]??3][1])}${n>1?' ×'+n:''}`).join(', ')}</td><td class="r num">${p.n}</td><td class="r num"><b>${fmt(p.amt)}</b></td><td class="r num" style="color:var(--good)">${fmt(p.paid)}</td><td class="r num" style="color:var(--orange)">${fmt(p.amt-p.paid)}</td></tr>`).join('')}
+  </tbody></table></div></section>`:''}
+  <section class="panel"><h2>งานที่ติดตั้งเสร็จ <span class="count">${done.length}</span></h2>
+  <div class="tbl-wrap"><table class="bontbl"><thead><tr><th>งาน</th><th class="r">Inverter</th><th class="r">วันติดตั้ง</th><th>ระดับ</th><th>ทีมช่าง</th><th class="r">โบนัสทีม</th><th>สถานะ</th></tr></thead><tbody>
+  ${done.map(({j,c})=>`<tr><td><button class="lnk" data-open="${j.id}" data-opentab="crew">${esc(j.name)}</button><br><span class="muted num" style="font-size:12px">${esc(j.code)}</span></td>
+    <td class="r num">${fmt1(c.kw)} kW<br><span class="muted" style="font-size:11px">ขั้น ${esc(c.tier.label)}</span></td>
+    <td class="r num">${c.days!=null?fmt1(c.days)+' วัน':'–'}<br><span class="muted" style="font-size:11px">S≤${c.tier.smax} N≤${c.tier.max}</span></td>
+    <td>${lvlPill(c.lvl)}</td><td>${c.people.length?c.people.map(p=>`<span class="crewchip">${esc(p.name)} <i>${esc(CREW_POS[POS_I[p.pos]??3][1])}</i></span>`).join(' '):'<span class="muted">ยังไม่ระบุ</span>'}</td>
+    <td class="r num"><b>${fmt(c.total)}</b></td>
+    <td>${c.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(c.paidAt)}</span>${pay?` <button class="lnk" data-cunpay="${j.id}">ยกเลิก</button>`:''}`:pay&&c.total>0?`<button class="btn sm pri" data-cpay="${j.id}">บันทึกจ่ายแล้ว</button>`:c.total>0?'<span class="pst pst-blue">รอจ่าย</span>':'–'}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">ยังไม่มีงานที่ติดตั้งเสร็จ${M==='all'?'':'ในเดือนนี้'}</td></tr>`}
+  </tbody></table></div></section>
+  <section class="panel"><h2>ตารางโบนัสทีมช่าง</h2>
+  <div class="tbl-wrap"><table class="crewtbl"><thead><tr><th rowspan="2">kW Inverter</th><th rowspan="2">ไม่เกิน (kW)</th><th rowspan="2">คาดหวัง (วัน)</th><th colspan="5" class="grp-n">Normal</th><th colspan="5" class="grp-s">Special</th>${ed?'<th rowspan="2"></th>':''}</tr>
+    <tr><th class="grp-n">Max Day</th>${CREW_POS.map(p=>`<th class="grp-n">${p[1]}</th>`).join('')}<th class="grp-s">Max Day</th>${CREW_POS.map(p=>`<th class="grp-s">${p[1]}</th>`).join('')}</tr></thead><tbody>
+  ${t.map((r,i)=>ed?`<tr><td><input class="in" id="ct-${i}-label" data-ctier="${i}" data-k="label" value="${esc(r.label)}"></td><td><input class="in num" id="ct-${i}-up" data-ctier="${i}" data-k="upTo" type="number" min="0" step="0.1" value="${+r.upTo}"></td><td><input class="in" id="ct-${i}-exp" data-ctier="${i}" data-k="exp" value="${esc(r.exp)}"></td>
+    <td class="grp-n"><input class="in num" id="ct-${i}-max" data-ctier="${i}" data-k="max" type="number" min="0" step="0.5" value="${+r.max}"></td>${CREW_POS.map((p,k)=>`<td class="grp-n"><input class="in num" id="ct-${i}-n${k}" data-ctier="${i}" data-k="n" data-pi="${k}" type="number" min="0" step="50" value="${+r.n[k]}"></td>`).join('')}
+    <td class="grp-s"><input class="in num" id="ct-${i}-smax" data-ctier="${i}" data-k="smax" type="number" min="0" step="0.5" value="${+r.smax}"></td>${CREW_POS.map((p,k)=>`<td class="grp-s"><input class="in num" id="ct-${i}-s${k}" data-ctier="${i}" data-k="s" data-pi="${k}" type="number" min="0" step="50" value="${+r.s[k]}"></td>`).join('')}
+    <td>${t.length>1?`<button class="rm" data-rmctier="${i}" aria-label="ลบขั้น">✕</button>`:''}</td></tr>`
+    :`<tr><td>${esc(r.label)}</td><td class="num">${+r.upTo}</td><td>${esc(r.exp)}</td><td class="num grp-n">${+r.max}</td>${r.n.map(v=>`<td class="num grp-n">${fmt(v)}</td>`).join('')}<td class="num grp-s">${+r.smax}</td>${r.s.map(v=>`<td class="num grp-s">${fmt(v)}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div>
+  ${ed?'<div class="acts"><button class="btn sm" data-act="addctier">+ เพิ่มขั้น</button></div>':''}
+  <p class="note" style="margin:0">ทำเสร็จภายใน Max Day ของ Special ได้อัตรา Special · ภายใน Max Day ของ Normal ได้อัตรา Normal · เกินกว่านั้นไม่ได้โบนัส · Inverter ที่ใหญ่กว่าขั้นสุดท้ายใช้อัตราขั้นสุดท้าย</p></section>
+  <section class="panel"><h2>รายชื่อช่างประจำ <span class="count">${crewRoster().length}</span></h2>
+  ${ed?`<div class="crewlist">${crewRoster().map((r,i)=>`<div class="crow"><input class="in" id="ro-${i}-name" data-roster="${i}" data-k="name" value="${esc(r.name)}" placeholder="ชื่อช่าง"><select class="in" id="ro-${i}-pos" data-roster="${i}" data-k="pos">${CREW_POS.map(([k,l])=>`<option value="${k}" ${r.pos===k?'selected':''}>${l}</option>`).join('')}</select><span></span><button class="rm" data-rmroster="${i}" aria-label="ลบ">✕</button></div>`).join('')}</div>
+    <div class="acts"><button class="btn sm" data-act="addroster">+ เพิ่มช่าง</button></div><p class="note" style="margin:0">ใช้เป็นตัวเลือกเวลาจัดทีมในแต่ละงาน ตำแหน่งที่ตั้งไว้เป็นค่าเริ่มต้น เปลี่ยนเป็นรายงานได้</p>`
+    :`<div class="list">${crewRoster().map(r=>`<div class="li"><span>${esc(r.name)}</span><span class="muted">${esc((CREW_POS.find(p=>p[0]===r.pos)||[,''])[1])}</span></div>`).join('')||'<p class="muted" style="margin:0">ยังไม่มีรายชื่อ</p>'}</div>`}
+  </section>`}
+function saveCrewTiers(t){return upsert('settings','app',{crewTiers:t},S.settings).catch(writeErr)}
+function saveRoster(r){return upsert('settings','app',{crewRoster:r},S.settings).catch(writeErr)}
+
 /* ---------- permissions page ---------- */
 function permHTML(){if(realRole()!=='admin')return noAccess('การตั้งค่าสิทธิ์');
   const pd=r=>({...DEFAULT_PERMS[r],...((S.permsDoc||{})[r]||{})});
@@ -584,7 +681,8 @@ function closeDrawer(){if(!S.open)return;S.open=null;S.lb=null;if(S.mini){S.mini
 function renderDrawer(force){
   const el=$('#drawer');if(!S.open)return;
   const j0=S.jobs.get(S.open);if(!j0){if(S.loaded)closeDrawer();return}
-  const ae=document.activeElement;if(!force&&el.contains(ae)&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)&&ae.type!=='checkbox'&&ae.type!=='file'){S.drawerDirty=true;return}
+  const ae=document.activeElement;let keep=null;
+  if(el.contains(ae)&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)&&ae.type!=='checkbox'&&ae.type!=='file'){if(ae.closest('form.apptf,form.payf')&&!force){S.drawerDirty=true;return}if(ae.id)keep={id:ae.id,val:ae.value,s:ae.selectionStart,e:ae.selectionEnd}}
   S.drawerDirty=false;
   const j={id:S.open,...j0};const i=SIDX[j.stage]??0;const dis=canEditJob(j0)?'':'disabled';
   const bodyScroll=el.querySelector('.d-body')?.scrollTop||0;
@@ -600,12 +698,13 @@ function renderDrawer(force){
     <div class="stage-row"><span class="now">ขั้นที่ ${i+1}/9 · ${esc(STAGES[i].t)}<small>อยู่ในขั้นนี้ ${days(j.stageAt)} วัน · เริ่ม ${dTH(j.stageAt)}</small></span>
       ${i>0?`<button class="btn sm" data-stage="${STAGES[i-1].k}" ${dis}>← ย้อน</button>`:''}
       ${i<8?`<button class="btn sm pri" data-stage="${STAGES[i+1].k}" ${dis}>ขั้นถัดไป: ${esc(STAGES[i+1].s)} →</button>`:''}</div>
-    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
+    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],...(can('bonus.view.all')||JW()?[['crew',`ทีมช่าง${(j.crew||[]).filter(c=>c&&c.name).length?` (${(j.crew||[]).filter(c=>c&&c.name).length})`:''}`]]:[]),['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
   </div>
-  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
+  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='crew'?crewTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
   el.querySelector('.d-body').scrollTop=bodyScroll;
   const at=el.querySelector('.tabs [aria-selected="true"]');if(at){const tb=at.parentElement;if(at.offsetLeft+at.offsetWidth>tb.scrollLeft+tb.clientWidth||at.offsetLeft<tb.scrollLeft)tb.scrollLeft=at.offsetLeft-24}
   if(S.tab==='info')initMini(j);
+  if(keep){const n=document.getElementById(keep.id);if(n){if(n.value!==keep.val)n.value=keep.val;n.focus({preventScroll:true});try{if(keep.s!=null)n.setSelectionRange(keep.s,keep.e)}catch{}}}
 }
 const opt=(arr,v)=>arr.map(([k,t])=>`<option value="${esc(k)}" ${String(v)===String(k)?'selected':''}>${esc(t)}</option>`).join('');
 function infoTab(j,dis){
@@ -618,6 +717,7 @@ function infoTab(j,dis){
   <div class="form">
     <div class="fld full"><label for="f-name">ชื่อลูกค้า</label><input class="in" id="f-name" data-f="name" value="${esc(j.name)}" ${dis}></div>
     <div class="fld"><label for="f-phone">เบอร์โทร</label><input class="in num" id="f-phone" data-f="phone" type="tel" value="${esc(j.phone)}" ${dis}></div>
+    <div class="fld"><label for="f-email">อีเมล</label><div class="team-add"><input class="in" id="f-email" data-f="email" type="email" value="${esc(j.email||'')}" placeholder="name@example.com" ${dis}>${j.email?`<button class="btn" data-copy="${esc(j.email)}" aria-label="คัดลอกอีเมล">คัดลอก</button>`:''}</div></div>
     <div class="fld"><label for="f-prov">จังหวัด</label><input class="in" id="f-prov" data-f="prov" value="${esc(j.prov)}" ${dis}></div>
     <div class="fld full"><label for="f-addr">ที่อยู่ติดตั้ง</label><input class="in" id="f-addr" data-f="addr" value="${esc(j.addr)}" ${dis}></div>
   </div>
@@ -806,14 +906,14 @@ function quoteDoc(j,autoPrint){const t=quoteTotals(j);const e=estimate(j);const 
   @media print{body{margin:0}th,.meta div{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
   <div class="hd"><div><img src="${LOGO}" alt="SOLAR TOUCH" style="height:64px;width:auto;display:block"><div style="margin-top:4px">ระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์บนหลังคา</div></div><div style="text-align:right"><h2>ใบเสนอราคา</h2><div>เลขที่ ${esc(j.code)}</div><div>วันที่ ${today}</div></div></div>
-  <div class="meta"><div><b>ลูกค้า</b><br>${esc(j.name)}<br>${esc(j.addr)} ${esc(j.prov)}<br>โทร ${esc(j.phone)}</div><div><b>ระบบที่เสนอ</b><br>${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid + แบตเตอรี่':'On-Grid'}<br>มิเตอร์ ${j.phase==='3'?'3':'1'} เฟส · ${j.util==='MEA'?'การไฟฟ้านครหลวง':'การไฟฟ้าส่วนภูมิภาค'}<br>หลังคา ${esc(j.roof||'')}${pmName(j)?`<br>ผู้ดูแลโครงการ ${esc(pmName(j))}`:''}</div></div>
+  <div class="meta"><div><b>ลูกค้า</b><br>${esc(j.name)}<br>${esc(j.addr)} ${esc(j.prov)}<br>โทร ${esc(j.phone)}${j.email?`<br>อีเมล ${esc(j.email)}`:''}</div><div><b>ระบบที่เสนอ</b><br>${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid + แบตเตอรี่':'On-Grid'}<br>มิเตอร์ ${j.phase==='3'?'3':'1'} เฟส · ${j.util==='MEA'?'การไฟฟ้านครหลวง':'การไฟฟ้าส่วนภูมิภาค'}<br>หลังคา ${esc(j.roof||'')}${pmName(j)?`<br>ผู้ดูแลโครงการ ${esc(pmName(j))}`:''}</div></div>
   <table><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th>หน่วย</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="tot"><div><span>รวมเป็นเงิน</span><span>${fmt(t.sub)}</span></div>${t.disc?`<div><span>ส่วนลด</span><span>-${fmt(t.disc)}</span></div>`:''}<div><span>ภาษีมูลค่าเพิ่ม 7%</span><span>${fmt(t.vat)}</span></div><div class="g"><span>รวมทั้งสิ้น</span><span>${fmt(t.total)} บาท</span></div></div>
   <div class="note"><b>ประมาณการ:</b> ผลิตไฟราว ${fmt(e.month)} หน่วย/เดือน ประหยัดค่าไฟราว ${fmt(e.monthSave)} บาท/เดือน คืนทุนประมาณ ${e.payback?e.payback.toFixed(1):'–'} ปี (ค่าไฟ ${e.tariff} บาท/หน่วย)<br>
   <b>เงื่อนไข:</b> ราคารวมการออกแบบ วิศวกรรับรอง และดำเนินการขออนุญาตท้องถิ่น แจ้ง กกพ. และยื่นขนานไฟกับการไฟฟ้า · ชำระมัดจำ 50% เมื่ออนุมัติ 40% เมื่อติดตั้งเสร็จ 10% เมื่อการไฟฟ้าเปลี่ยนมิเตอร์ · ใบเสนอราคามีอายุ 30 วัน</div>
   <div class="sign"><div>ผู้เสนอราคา</div><div>ลูกค้าผู้อนุมัติ</div></div>${autoPrint?'<script>window.onload=()=>setTimeout(()=>window.print(),500)<\/script>':''}</body></html>`}
 function quoteText(j){const t=quoteTotals(j);const e=estimate(j);return `ใบเสนอราคา SOLARTOUCH ${j.code}
-ลูกค้า: ${j.name}
+ลูกค้า: ${j.name}${j.email?' ('+j.email+')':''}
 ระบบ: ${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid':'On-Grid'} ${j.phase==='3'?'3':'1'} เฟส
 ${(j.quote?.items||[]).map((it,k)=>`${k+1}. ${it.d} × ${fmt1(it.q)} ${it.u} = ${fmt((+it.q||0)*(+it.p||0))}`).join('\n')}
 รวมทั้งสิ้น (รวม VAT 7%): ${fmt(t.total)} บาท
@@ -823,7 +923,7 @@ async function saveFile(name,data,type){
   if(BK.kind==='artifact'){try{await dl.save({filename:name,data})}catch(e){if(!e||e.code!=='declined')toast('บันทึกไฟล์ไม่สำเร็จ')}return}
   const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000)}
 function printQuote(j){const url=URL.createObjectURL(new Blob([quoteDoc(j,true)],{type:'text/html'}));const w=window.open(url,'_blank');if(!w){saveFile(`ใบเสนอราคา-${j.code}.html`,quoteDoc(j,false),'text/html');toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ จึงดาวน์โหลดไฟล์ให้แทน')}setTimeout(()=>URL.revokeObjectURL(url),60000)}
-function csv(){const rows=[['รหัสงาน','ลูกค้า','โทร','จังหวัด','การไฟฟ้า','kWp','ขั้นตอน','ผู้ดูแลโครงการ','เอกสาร','หมวดรูป','มูลค่ารวม VAT','ละติจูด','ลองจิจูด','อัปเดตล่าสุด']];visibleJobs().forEach(j=>{const pp=permitProg(j),ph=photoProg(j);rows.push([j.code,j.name,j.phone,j.prov,j.util,j.kw,STAGES[SIDX[j.stage]].t,pmName(j),`${pp.d}/${pp.n}`,`${ph.d}/${ph.n}`,Math.round(quoteTotals(j).total),hasLoc(j)?j.lat:'',hasLoc(j)?j.lng:'',new Date(j.updatedAt).toISOString()])});return '﻿'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')}
+function csv(){const rows=[['รหัสงาน','ลูกค้า','โทร','อีเมล','จังหวัด','การไฟฟ้า','kWp','ขั้นตอน','ผู้ดูแลโครงการ','เอกสาร','หมวดรูป','มูลค่ารวม VAT','ละติจูด','ลองจิจูด','อัปเดตล่าสุด']];visibleJobs().forEach(j=>{const pp=permitProg(j),ph=photoProg(j);rows.push([j.code,j.name,j.phone,j.email||'',j.prov,j.util,j.kw,STAGES[SIDX[j.stage]].t,pmName(j),`${pp.d}/${pp.n}`,`${ph.d}/${ph.n}`,Math.round(quoteTotals(j).total),hasLoc(j)?j.lat:'',hasLoc(j)?j.lng:'',new Date(j.updatedAt).toISOString()])});return '﻿'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')}
 async function copy(txt,okMsg){try{await navigator.clipboard.writeText(txt);toast(okMsg)}catch{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(okMsg)}catch{toast('คัดลอกไม่สำเร็จ')}ta.remove()}}
 
 /* ---------- modals ---------- */
@@ -833,6 +933,7 @@ function openNew(){if(!S.canWrite)return;
   modal('งานติดตั้งใหม่',`<form id="nf"><div class="form">
     <div class="fld full"><label for="n-name">ชื่อลูกค้า</label><input class="in" id="n-name" name="name" required placeholder="คุณ…"></div>
     <div class="fld"><label for="n-phone">เบอร์โทร</label><input class="in" id="n-phone" name="phone" type="tel" placeholder="08x-xxx-xxxx"></div>
+    <div class="fld"><label for="n-email">อีเมล</label><input class="in" id="n-email" name="email" type="email" placeholder="name@example.com" autocomplete="off"></div>
     <div class="fld"><label for="n-prov">จังหวัด</label><input class="in" id="n-prov" name="prov" placeholder="เช่น นนทบุรี"></div>
     <div class="fld full"><label for="n-addr">ที่อยู่ติดตั้ง</label><input class="in" id="n-addr" name="addr"></div>
     <div class="fld full"><label for="n-loc">ตำแหน่ง Google Maps (ถ้ามี)</label><input class="in" id="n-loc" name="loc" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 13.7563, 100.5018"></div>
@@ -858,7 +959,14 @@ function addAppt(jobId,f){const j=S.jobs.get(jobId);if(!j||!f.date)return;const 
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay]');if(!t)return;
+  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy]');if(!t)return;
+  if(t.matches('[data-copy]')){copy(t.dataset.copy,'คัดลอกอีเมลแล้ว');return}
+  if(t.matches('[data-btab]')){S.bTab=t.dataset.btab;renderView();return}
+  if(t.matches('[data-rmcrew]')){const j=S.jobs.get(S.open);const c=[...(j.crew||[])];c.splice(+t.dataset.rmcrew,1);saveCrew(S.open,c);return}
+  if(t.dataset.cpay){const j=S.jobs.get(t.dataset.cpay);const c=crewBonusOf({id:t.dataset.cpay,...j});saveBonus(t.dataset.cpay,{crewPaid:true,crewPaidAt:Date.now(),crewPaidBy:S.me,crewAmt:c.total,crewList:c.people.map(p=>({name:p.name,pos:p.pos,amt:p.amt}))}).then(()=>toast(`บันทึกจ่ายโบนัสทีมช่าง ฿${fmt(c.total)} แล้ว`));return}
+  if(t.dataset.cunpay){const id=t.dataset.cunpay;arm(t,'ยืนยัน?',()=>saveBonus(id,{crewPaid:false,crewPaidAt:null,crewPaidBy:null,crewAmt:null,crewList:null}));return}
+  if(t.matches('[data-rmctier]')){saveCrewTiers(crewTiers().filter((_,i)=>i!==+t.dataset.rmctier));return}
+  if(t.matches('[data-rmroster]')){saveRoster(crewRoster().filter((_,i)=>i!==+t.dataset.rmroster));return}
   if(t.matches('[data-payf]')){S.payFilter=t.dataset.payf;renderView();return}
   if(t.matches('[data-preview]')){S.previewRole=t.dataset.preview;closeModal();render();return}
   if(t.dataset.bpay){const j=S.jobs.get(t.dataset.bpay);const b=bonusOf({id:t.dataset.bpay,...j});saveBonus(t.dataset.bpay,{paid:true,paidAt:Date.now(),paidBy:S.me,amt:b.amt,to:j.pm||null}).then(()=>toast(`บันทึกจ่ายโบนัส ฿${fmt(b.amt)} แล้ว`));return}
@@ -884,6 +992,10 @@ document.addEventListener('click',e=>{
   if(t.dataset.rmmember){const em=t.dataset.rmmember;arm(t,'ยืนยันลบ',()=>BK.remove('members',em).then(()=>toast('ลบสมาชิกแล้ว')).catch(writeErr));return}
   const a=t.dataset.act;const j=S.open&&S.jobs.get(S.open);
   if(a==='more')openMore();
+  else if(a==='addcrew'){const c=[...(j.crew||[])];c.push({name:'',pos:c.length?'help':'lead'});saveCrew(S.open,c)}
+  else if(a==='crewdefault'){saveCrew(S.open,crewRoster().slice(0,MAX_CREW).map(r=>({name:r.name,pos:r.pos})))}
+  else if(a==='addctier'){const t=crewTiers();const l=t[t.length-1];saveCrewTiers([...t,{label:'ใหม่',upTo:(+l.upTo||0)+10,exp:'',max:+l.max+1,smax:+l.smax+1,n:[...l.n],s:[...l.s]}])}
+  else if(a==='addroster'){saveRoster([...crewRoster(),{name:'',pos:'help'}])}
   else if(a==='addins'){const ins=[...appCfg().installments,{k:rid('i'),label:'งวดใหม่',pct:0,stage:'done'}];upsert('settings','app',{installments:ins},S.settings).catch(writeErr)}
   else if(a==='addtier'){const t=appCfg().tiers;const last=t.filter(x=>+x.upTo>0).reduce((m,x)=>Math.max(m,+x.upTo),0);saveTiers([...t,{upTo:last+10,amt:0}])}
   else if(a==='new')openNew();
@@ -915,6 +1027,13 @@ document.addEventListener('submit',e=>{const f=e.target;
 document.addEventListener('change',e=>{const el=e.target;
   if(el.id==='pmFilter'){S.pmFilter=el.value;renderView();return}
   if(el.id==='bMonth'){S.bMonth=el.value;renderView();return}
+  if(el.dataset.inst){const j=S.jobs.get(S.open);if(!j)return;const k=el.dataset.inst;const v=k==='days'?(+el.value||null):el.value;saveJob(S.open,{inst:{[k]:v}},k==='days'?`บันทึกวันทำงานจริง ${v||'-'} วัน`:`บันทึก${k==='start'?'วันเริ่ม':'วันเสร็จ'}ติดตั้ง ${v}`);return}
+  if(el.dataset.crew!=null){const j=S.jobs.get(S.open);if(!j)return;const c=(j.crew||[]).map(x=>({...x}));const r=c[+el.dataset.crew];if(!r)return;r[el.dataset.k]=el.value;
+    if(el.dataset.k==='name'){const ro=crewRoster().find(x=>x.name===el.value);if(ro)r.pos=ro.pos}saveCrew(S.open,c);return}
+  if(el.dataset.ctier!=null){const t=crewTiers().map(x=>({...x,n:[...x.n],s:[...x.s]}));const r=t[+el.dataset.ctier];if(!r)return;const k=el.dataset.k;
+    if(k==='n'||k==='s')r[k][+el.dataset.pi]=+el.value||0;else r[k]=(k==='label'||k==='exp')?el.value:(+el.value||0);
+    if(k==='upTo')t.sort((a,b)=>+a.upTo-+b.upTo);saveCrewTiers(t);return}
+  if(el.dataset.roster!=null){const r=crewRoster().map(x=>({...x}));const it=r[+el.dataset.roster];if(!it)return;it[el.dataset.k]=el.value;saveRoster(r);return}
   if(el.dataset.ins!=null){const ins=appCfg().installments.map(x=>({...x}));const it=ins[+el.dataset.ins];if(!it)return;it[el.dataset.k]=el.dataset.k==='pct'?+el.value||0:el.value;upsert('settings','app',{installments:ins},S.settings).catch(writeErr);return}
   if(el.dataset.duedays){upsert('settings','app',{dueDays:Math.max(1,+el.value||7)},S.settings).catch(writeErr);return}
   if(el.dataset.tier!=null){const t=appCfg().tiers.map(x=>({...x}));const it=t[+el.dataset.tier];if(!it)return;it[el.dataset.k]=+el.value||0;saveTiers(t);return}
@@ -934,7 +1053,7 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;if(S.view==='team'||S.vi
 
 $('#drawer').addEventListener('change',e=>{const el=e.target;const id=S.open;const j=S.jobs.get(id);if(!j)return;
   if(el.dataset.upload||el.closest('form.apptf')||el.closest('form.payf'))return;
-  if(el.dataset.f){const k=el.dataset.f;let v=el.value;if(k==='kw'||k==='inv')v=+v||0;if(j[k]===v)return;const L={name:'ชื่อลูกค้า',phone:'เบอร์โทร',prov:'จังหวัด',addr:'ที่อยู่',util:'การไฟฟ้า',phase:'มิเตอร์',type:'ประเภทระบบ',kw:'ขนาดระบบ',inv:'ขนาด Inverter',roof:'ชนิดหลังคา',note:'บันทึกหน้างาน',pmName:'ผู้ดูแลโครงการ'};saveJob(id,{[k]:v},k==='pmName'?`กำหนดผู้ดูแลโครงการ: ${v}`:`แก้ไข${L[k]||k}`)}
+  if(el.dataset.f){const k=el.dataset.f;let v=el.value;if(k==='kw'||k==='inv')v=+v||0;if(j[k]===v)return;const L={name:'ชื่อลูกค้า',phone:'เบอร์โทร',email:'อีเมล',prov:'จังหวัด',addr:'ที่อยู่',util:'การไฟฟ้า',phase:'มิเตอร์',type:'ประเภทระบบ',kw:'ขนาดระบบ',inv:'ขนาด Inverter',roof:'ชนิดหลังคา',note:'บันทึกหน้างาน',pmName:'ผู้ดูแลโครงการ'};saveJob(id,{[k]:v},k==='pmName'?`กำหนดผู้ดูแลโครงการ: ${v}`:`แก้ไข${L[k]||k}`)}
   else if(el.dataset.pm){const v=el.value;if(v==='_other'){saveJob(id,{pm:null,pmName:j.pmName||'',pmOther:true}).then(()=>renderDrawer(true));return}saveJob(id,{pm:v||null,pmName:'',pmOther:false},v?`กำหนดผู้ดูแลโครงการ: ${nm(v)}`:'ยกเลิกผู้ดูแลโครงการ').then(()=>renderDrawer(true))}
   else if(el.dataset.loc){const v=el.value.trim();const p=parseLoc(v);if(!v){saveJob(id,{lat:null,lng:null,mapUrl:''},'ลบตำแหน่ง');return}
     if(p)saveJob(id,{lat:p.lat,lng:p.lng,mapUrl:/^https?:/.test(v)?v:''},'บันทึกตำแหน่ง Google Maps');
@@ -987,7 +1106,10 @@ async function bootDemo(){BK=memoryBackend();S.mode='demo';S.me='demo';S.isAdmin
   for(const d of all){const j=d.data;const tot=quoteTotals(j).total;const ins=DEFAULT_APP.installments;const rec={};
     ins.forEach(it=>{if(SIDX[j.stage]>=SIDX[it.stage]&&!(j.stage==='install'&&it.k!=='dep')&&!(j.stage==='grid'&&it.k==='inst'))rec[it.k]={amt:Math.round(tot*it.pct/100),date:ymd(new Date(Date.now()-3*86400000)),method:'โอนเงิน',note:'',by:'demo',at:Date.now()}});
     if(Object.keys(rec).length)BK.put('finance',d.id,{job:d.id,rec});
+    if(['install','grid','done'].includes(j.stage)){const D=86400000,end=new Date(Date.now()-(j.stage==='install'?0:5)*D);const dd=j.stage==='done'?3:2;
+      BK.patch('jobs',d.id,{inst:j.stage==='install'?{start:ymd(new Date(Date.now()-D))}:{start:ymd(new Date(end.getTime()-(dd-1)*D)),end:ymd(end)},crew:[{name:'สมชาย ใจดี',pos:'lead'},{name:'ประยุทธ แข็งแรง',pos:'sub'},{name:'วีระ ช่างไฟ',pos:'tech'},{name:'อาทิตย์ ขยัน',pos:'tech'},{name:'มานพ ช่วยงาน',pos:'help'},{name:'เด่น ตั้งใจ',pos:'help'}]})}
     if(j.stage==='done')BK.put('bonus',d.id,{job:d.id,paid:true,paidAt:Date.now()-86400000,paidBy:'demo',amt:bonusOf({id:d.id,...j}).amt})}
+  BK.put('settings','app',{crewRoster:[{name:'สมชาย ใจดี',pos:'lead'},{name:'ประยุทธ แข็งแรง',pos:'sub'},{name:'วีระ ช่างไฟ',pos:'tech'},{name:'อาทิตย์ ขยัน',pos:'tech'},{name:'มานพ ช่วยงาน',pos:'help'},{name:'เด่น ตั้งใจ',pos:'help'}]});
   showApp()}
 async function bootArtifact(){
   const use=n=>window.claude.use(n).catch(()=>null);
