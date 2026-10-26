@@ -386,7 +386,7 @@ function teamHTML(){
     <div class="list">${ids.map(id=>{const n=[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length;return `<div class="mem">${av(id)}<span style="min-width:0"><b>${esc(nm(id))}${id===S.me?' (คุณ)':''}</b><small>ดูแลโครงการที่กำลังดำเนินการ ${n} งาน</small></span><button class="btn sm" data-pmjump="${esc(id)}">ดูงาน</button></div>`}).join('')}</div></section>`}
   const on=new Set(onlinePeers().map(p=>p.by));
   const byEmail={};Object.entries(S.prof).forEach(([id,p])=>{if(p.email)byEmail[p.email.toLowerCase()]=id});
-  const rows=[...new Set([...ADMIN_EMAILS,...S.members.map(m=>m.id)])].sort();
+  const rows=[...new Set([...ADMIN_EMAILS,...(S.isAdmin?[S.email]:[]),...S.members.map(m=>m.id)])].sort();
   return `<section class="panel"><h2>บัญชีของคุณ</h2>
     <div class="owner">${av(S.me)}<span class="who"><b>${esc(nm(S.me))}</b><small>${esc(S.email)} · ${S.isAdmin?'ผู้ดูแลระบบ':'สมาชิกทีม'}</small></span><button class="btn sm" data-act="signout">ออกจากระบบ</button></div>
   </section>
@@ -396,7 +396,7 @@ function teamHTML(){
   </section>
   <section class="panel"><h2>สมาชิกที่เข้าใช้ได้ <span class="count">${rows.length}</span></h2>
     ${S.isAdmin?`<form class="team-add" id="addMember"><input class="in" id="memEmail" type="email" required placeholder="อีเมล Gmail ของสมาชิก เช่น somchai@gmail.com"><button class="btn pri" type="submit">เพิ่มสมาชิก</button></form>`:'<p class="note" style="margin:0">เฉพาะผู้ดูแลระบบเพิ่มหรือลบสมาชิกได้</p>'}
-    <div class="list">${rows.map(e=>{const id=byEmail[e];const isA=ADMIN_EMAILS.includes(e);const n=id?[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length:0;return `<div class="mem">${id?av(id):avName(e)}<span style="min-width:0"><b>${esc(id?nm(id):e)}</b><small>${esc(e)} · ${isA?'ผู้ดูแลระบบ':'สมาชิก'}${id?` · ดูแล ${n} งาน${on.has(id)?' · <span style="color:var(--good)">ออนไลน์</span>':''}`:' · ยังไม่เคยเข้าสู่ระบบ'}</small></span>${S.isAdmin&&!isA?`<button class="btn sm danger" data-rmmember="${esc(e)}">ลบ</button>`:''}</div>`}).join('')}</div>
+    <div class="list">${rows.map(e=>{const id=byEmail[e];const isA=ADMIN_EMAILS.includes(e)||(S.isAdmin&&e===S.email);const n=id?[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length:0;return `<div class="mem">${id?av(id):avName(e)}<span style="min-width:0"><b>${esc(id?nm(id):e)}</b><small>${esc(e)} · ${isA?'ผู้ดูแลระบบ':'สมาชิก'}${id?` · ดูแล ${n} งาน${on.has(id)?' · <span style="color:var(--good)">ออนไลน์</span>':''}`:' · ยังไม่เคยเข้าสู่ระบบ'}</small></span>${S.isAdmin&&!isA?`<button class="btn sm danger" data-rmmember="${esc(e)}">ลบ</button>`:''}</div>`}).join('')}</div>
   </section>`;
 }
 
@@ -806,6 +806,8 @@ async function bootFirebase(){
     if(!u){S.me=null;showGate('signin');return}
     S.me=u.uid;S.email=(u.email||'').toLowerCase();S.isAdmin=ADMIN_EMAILS.includes(S.email);
     showGate('loading',S.email);
+    // admin list lives only in firestore.rules: reading admins/<email> is allowed only for admins
+    if(!S.isAdmin){try{await fs.getDoc(fs.doc(db,'admins',S.email));S.isAdmin=true}catch{S.isAdmin=false}}
     let ok=S.isAdmin;if(!ok){try{ok=(await fs.getDoc(fs.doc(db,'members',S.email))).exists()}catch{ok=false}}
     if(!ok){showGate('denied',S.email);return}
     S.member=true;S.mode='connecting';

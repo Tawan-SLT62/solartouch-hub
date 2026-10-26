@@ -2,8 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ใส่อีเมลผู้ดูแลระบบ (ตัวพิมพ์เล็ก) ให้ตรงกับ ADMIN_EMAILS ใน firebase-config.js
-    function adminEmails() { return ['your.name@gmail.com']; }
+    // อีเมลผู้ดูแลระบบ (ตัวพิมพ์เล็ก) เพิ่มคนได้โดยคั่นด้วยจุลภาค แล้วกด Publish ใหม่ใน Firebase Console
+    function adminEmails() { return ['itawan30092545@gmail.com']; }
 
     function signedIn() {
       return request.auth != null && request.auth.token.email_verified == true;
@@ -13,6 +13,12 @@ service cloud.firestore {
     function isMember() {
       return signedIn() && (isAdmin() ||
         exists(/databases/$(database)/documents/members/$(myEmail())));
+    }
+
+    // ใช้ตรวจว่าเป็นผู้ดูแลหรือไม่ (อ่านได้เฉพาะผู้ดูแล ไม่ต้องมีเอกสารจริง)
+    match /admins/{email} {
+      allow get: if isAdmin() && email == myEmail();
+      allow write: if false;
     }
 
     // รายชื่อสมาชิกที่อนุญาต: ผู้ดูแลเท่านั้นที่เพิ่ม/ลบได้
