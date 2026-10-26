@@ -48,7 +48,8 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100%}
 .rail{background:var(--rail);color:var(--rail-ink);padding:22px 14px;display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;height:100dvh}
 .brand{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:0 2px;color:var(--rail-hi)}
-.brand img{display:block;width:100%;height:auto;background:#fff;border-radius:12px;padding:12px 14px;box-sizing:border-box}
+.logo-card{display:block;background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.logo-card img{display:block;max-width:100%;height:auto}
 .brand small{text-align:center}
 .brand svg{flex:none}
 .brand b{font-family:var(--f-display);font-size:18px;letter-spacing:.04em;display:block;line-height:1.1}
@@ -285,7 +286,7 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
   .top{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   .top h1{display:none}
   .top .mbrand{display:flex;align-items:center;margin-right:auto}
-  .top .mbrand img{height:34px;width:auto;background:#fff;border-radius:8px;padding:3px 6px}
+  .top .mbrand .logo-card{padding:5px 10px;border-radius:9px;box-shadow:0 0 0 1px var(--line)}
   .top .newbtn{display:none}
   .search{order:5;flex:1 1 100%}
   #view{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
@@ -427,6 +428,27 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
 .maplist a{color:var(--blue);font-weight:600}
 @media (max-width:900px){.cal{margin-bottom:8px}}
 
-.gate-logo{width:min(300px,80%);height:auto;background:#fff;border-radius:14px;padding:10px 14px}
+.gate-logo{width:min(300px,80%);padding:8px 10px;box-shadow:none}
 .empty .emark{width:72px;height:auto}
 .gate p{overflow-wrap:anywhere}.gate .box{min-width:0;max-width:100%}
+
+/* ---- v5: payments, bonus, permissions ---- */
+.pst{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap;margin-top:3px}
+.pst-good{background:var(--good-soft);color:var(--good)}.pst-warn{background:var(--warn-soft);color:var(--warn)}.pst-bad{background:var(--bad-soft);color:var(--bad)}.pst-blue{background:var(--blue-soft);color:var(--blue)}.pst-muted{background:var(--surface-2);color:var(--ink-3)}
+.paytbl td{vertical-align:top}
+.inst{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.inst-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.inst-h b{margin-right:auto}
+.inst-r{display:flex;flex-direction:column;gap:3px;background:var(--good-soft);border-radius:9px;padding:10px 12px;font-size:14px;align-items:flex-start}
+.inst-r .btn{margin-top:4px}
+.settbl{min-width:420px}.settbl td{white-space:normal;cursor:default;padding:6px 8px}.settbl tbody tr:hover td{background:none}.settbl .in{height:36px}
+.settbl .rm,.paytbl .rm{border:0;background:none;color:var(--ink-3);width:30px;height:30px;border-radius:6px}.settbl .rm:hover{color:var(--bad);background:var(--bad-soft)}
+.permtbl td,.permtbl th{white-space:normal}.permtbl tbody tr{cursor:default}.permtbl tbody tr:hover td{background:none}.permtbl .c{text-align:center;width:150px}
+.permtbl input{width:20px;height:20px;accent-color:var(--orange)}
+.bontbl tbody tr{cursor:default}.bontbl .adj{width:96px;height:32px;text-align:right}
+.inline{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)}
+.morelist{padding:16px 20px 22px;display:flex;flex-direction:column;gap:8px}.morelist .btn{justify-content:flex-start;height:48px}
+.banner.preview{background:var(--blue-soft);color:var(--blue);margin:16px max(24px,env(safe-area-inset-right,0px)) 0 max(24px,env(safe-area-inset-left,0px));align-items:center;flex-wrap:wrap}
+.nav{overflow-y:auto}
+@media (max-width:900px){.banner.preview{margin-inline:16px}}
+.permtbl td:first-child{min-width:150px}
+@media (max-width:560px){.permtbl .c{width:72px;font-size:11.5px}}

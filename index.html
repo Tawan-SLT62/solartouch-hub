@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
-<link rel="stylesheet" href="vendor/leaflet.css">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="vendor/leaflet.css?v=5">
+<link rel="stylesheet" href="styles.css?v=5">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 </head>
 <body>
@@ -24,7 +24,7 @@
 <!-- sign-in gate -->
 <div class="gate" id="gate" hidden>
   <div class="box">
-    <img class="gate-logo" src="logo.png" alt="SOLAR TOUCH" width="372" height="107">
+    <span class="logo-card gate-logo"><img src="logo.png" alt="SOLAR TOUCH" width="372" height="107" style="display:block;width:100%;height:auto"></span>
     <p id="gateMsg">ระบบบริหารงานติดตั้งโซลาร์บ้านของทีม เข้าสู่ระบบด้วยบัญชี Google ที่ผู้ดูแลอนุญาตไว้</p>
     <button class="btn gbtn" id="gSignIn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>เข้าสู่ระบบด้วย Google</button>
     <button class="btn ghost" id="gSignOut" hidden>ออกจากระบบ และใช้บัญชีอื่น</button>
@@ -34,14 +34,17 @@
 
 <div class="app" id="app" hidden>
   <aside class="rail">
-    <div class="brand"><img src="logo.png" alt="SOLAR TOUCH" width="372" height="107"><small>PROJECT HUB</small></div>
+    <div class="brand"><span class="logo-card"><img src="logo.png" alt="SOLAR TOUCH" width="372" height="107" style="display:block;width:100%;height:auto"></span><small>PROJECT HUB</small></div>
     <nav class="nav">
       <button data-view="dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>ภาพรวม</button>
       <button data-view="board"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>บอร์ดงานติดตั้ง</button>
       <button data-view="cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>ปฏิทินงาน</button>
       <button data-view="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>แผนที่งาน</button>
       <button data-view="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>รายการลูกค้า</button>
+      <button data-view="pay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6.5 15h4"/></svg>สถานะการจ่ายเงิน</button>
+      <button data-view="bonus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/><path d="M10.2 9.3 11.4 10.5 14 7.8"/></svg>Job Bonus</button>
       <button data-view="team"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.1 4.6 1.8 5.3 4.4"/></svg>ทีมงาน</button>
+      <button data-view="perm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.3 7.5 9.5 4.3-1.2 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>สิทธิ์การใช้งาน</button>
     </nav>
     <div class="rail-foot">
       <div class="sync" id="syncR"><span class="dot"></span><span>กำลังเชื่อมต่อ…</span></div>
@@ -52,13 +55,14 @@
 
   <div class="main">
     <header class="top">
-      <div class="mbrand"><img src="logo.png" alt="SOLAR TOUCH" width="372" height="107"></div>
+      <div class="mbrand"><span class="logo-card"><img src="logo.png" alt="SOLAR TOUCH" width="372" height="107" style="display:block;height:30px;width:auto"></span></div>
       <h1 id="vtitle">ภาพรวม</h1>
       <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="ค้นหาชื่อ เบอร์ รหัสงาน จังหวัด" autocomplete="off"></label>
       <div class="peers" id="peers" aria-label="ผู้ที่ออนไลน์"></div>
-      <button class="btn sm ghost teambtn" data-view="team" aria-label="ทีมงาน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.1 4.6 1.8 5.3 4.4"/></svg></button>
+      <button class="btn sm ghost teambtn" data-act="more" aria-label="เมนูเพิ่มเติม"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.6.1 4.6 1.8 5.3 4.4"/></svg></button>
       <button class="btn pri newbtn" id="newBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>งานใหม่</button>
     </header>
+    <div id="previewBar" class="banner preview" hidden></div>
     <main id="view"></main>
   </div>
 </div>
@@ -81,8 +85,8 @@
 <!--/SHELL-->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="logo-data.js"></script>
+<script src="logo-data.js?v=5"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

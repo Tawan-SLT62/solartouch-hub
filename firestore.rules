@@ -15,6 +15,22 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/members/$(myEmail())));
     }
 
+    // ตำแหน่งและสิทธิ์ (ตั้งค่าในเมนู "สิทธิ์การใช้งาน")
+    function memberDoc() { return get(/databases/$(database)/documents/members/$(myEmail())).data; }
+    function role() { return isAdmin() ? 'admin' : memberDoc().get('role', 'staff'); }
+    function defaultPerm(r, p) {
+      return (r == 'manager' && p in ['jobs.edit.own','jobs.delete','quote.view','finance.view','finance.edit','bonus.view.all','bonus.view.own'])
+          || (r == 'staff' && p in ['jobs.edit.own','bonus.view.own']);
+    }
+    function can(p) {
+      let path = /databases/$(database)/documents/settings/perms;
+      return isAdmin() || (isMember() && (exists(path)
+        ? get(path).data.get(role(), {}).get(p, defaultPerm(role(), p)) == true
+        : defaultPerm(role(), p)));
+    }
+    function ownsJob(data) { return data.get('pm', null) == request.auth.uid; }
+    function canEditJobData(data) { return can('jobs.edit') || (can('jobs.edit.own') && ownsJob(data)); }
+
     // ใช้ตรวจว่าเป็นผู้ดูแลหรือไม่ (อ่านได้เฉพาะผู้ดูแล ไม่ต้องมีเอกสารจริง)
     match /admins/{email} {
       allow get: if isAdmin() && email == myEmail();
@@ -28,15 +44,39 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // งานติดตั้ง: สมาชิกทุกคนอ่านและแก้ไขได้
+    // งานติดตั้ง: สมาชิกทุกคนอ่านได้ แก้ไขตามสิทธิ์
     match /jobs/{jobId} {
-      allow read, write: if isMember();
+      allow read: if isMember();
+      allow create: if canEditJobData(request.resource.data);
+      // ผู้ดูแลโครงการแก้ได้เฉพาะงานของตัวเอง และย้ายผู้ดูแลไปให้คนอื่นไม่ได้
+      allow update: if can('jobs.edit') || (can('jobs.edit.own') && ownsJob(resource.data) && ownsJob(request.resource.data));
+      allow delete: if can('jobs.delete') && canEditJobData(resource.data);
+    }
+
+    // การรับชำระเงินจากลูกค้า
+    match /finance/{jobId} {
+      allow read: if can('finance.view');
+      allow write: if can('finance.edit');
+    }
+
+    // สถานะจ่ายโบนัส
+    match /bonus/{jobId} {
+      allow read: if can('bonus.view.all') || can('bonus.view.own');
+      allow write: if can('bonus.pay');
+    }
+
+    // ตั้งค่า: งวดชำระ/อัตราโบนัส และตารางสิทธิ์ (ตารางสิทธิ์แก้ได้เฉพาะผู้ดูแลระบบ)
+    match /settings/{docId} {
+      allow read: if isMember();
+      allow write: if isAdmin() || (docId == 'app' && can('settings.edit'));
     }
 
     // รูปถ่ายงานติดตั้ง (เก็บเป็นรูปย่อขนาดในเอกสาร ไม่ต้องใช้ Firebase Storage)
     match /photos/{photoId} {
-      allow read, delete: if isMember();
-      allow create, update: if isMember() && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
+      allow read: if isMember();
+      allow delete: if can('jobs.edit') || (can('jobs.edit.own') && ownsJob(get(/databases/$(database)/documents/jobs/$(resource.data.job)).data));
+      allow create, update: if request.resource.data.data is string && request.resource.data.data.size() < 1000000
+        && (can('jobs.edit') || (can('jobs.edit.own') && ownsJob(get(/databases/$(database)/documents/jobs/$(request.resource.data.job)).data)));
     }
 
     // โปรไฟล์ (ชื่อ/รูป) ใช้แสดงผล: แก้ไขได้เฉพาะของตัวเอง
