@@ -510,11 +510,21 @@ function bonusOf(j){const kw=invKw(j)??invEst(j);const tier=bonusTier(kw);const 
   return{kw,est:invKw(j)==null,tier,base,adj:+b.adj||0,note:b.note||'',amt,paid:!!b.paid,paidAt:b.paidAt,paidBy:b.paidBy,reached,at,doc:b}}
 const monthKey=t=>{const d=new Date(t);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`};
 const monthTH=k=>{const [y,m]=k.split('-').map(Number);return new Date(y,m-1,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'})};
+/* ช่วงเวลาของ Job Bonus: ทุกเดือน / รายเดือน / กำหนดช่วงวันเอง */
+function bInPeriod(t){const M=S.bMonth||'all';if(M==='all')return true;if(!t)return false;
+  if(M==='custom'){const f=S.bFrom?parseYmd(S.bFrom).getTime():-Infinity,to=S.bTo?parseYmd(S.bTo).getTime()+86400000-1:Infinity;return t>=f&&t<=to}
+  return monthKey(t)===M}
+function bPeriodLabel(){const M=S.bMonth||'all';if(M==='all')return'ทุกเดือน';if(M!=='custom')return monthTH(M);
+  return `${S.bFrom?dTH(parseYmd(S.bFrom).getTime()):'เริ่มต้น'} – ${S.bTo?dTH(parseYmd(S.bTo).getTime()):'ปัจจุบัน'}`}
+function bPeriodTools(months){const M=S.bMonth||'all';
+  return `<label class="inline">ช่วงที่ติดตั้งเสร็จ <select class="in sel-sm" id="bMonth"><option value="all" ${M==='all'?'selected':''}>ทุกเดือน</option>${months.map(k=>`<option value="${k}" ${M===k?'selected':''}>${monthTH(k)}</option>`).join('')}<option value="custom" ${M==='custom'?'selected':''}>กำหนดช่วงวันเอง…</option></select></label>
+  ${M==='custom'?`<label class="inline">ตั้งแต่ <input class="in sel-sm" type="date" id="bFrom" value="${esc(S.bFrom||'')}" ${S.bTo?`max="${esc(S.bTo)}"`:''}></label><label class="inline">ถึง <input class="in sel-sm" type="date" id="bTo" value="${esc(S.bTo||'')}" ${S.bFrom?`min="${esc(S.bFrom)}"`:''}></label>`:''}`}
+const bXlsBtn=()=>canDownload()?'<button class="btn sm" data-act="bonusxlsx">ส่งออก Excel</button>':'';
 function bonusHTML(){const all=can('bonus.view.all'),own=can('bonus.view.own');if(!all&&!own)return noAccess('โบนัส');
   const tab=all?(S.bTab||'crew'):'pm';
   const tabs=all?`<div class="tools"><button class="chip" data-btab="crew" aria-pressed="${tab==='crew'}">ทีมช่างติดตั้ง</button><button class="chip" data-btab="pm" aria-pressed="${tab==='pm'}">ผู้ดูแลโครงการ</button></div>`:'';
-  if(tab==='crew'){const ms=[...new Set(visibleJobs().map(j=>crewBonusOf(j)).filter(c=>c.reached&&c.at).map(c=>monthKey(c.at)))].sort().reverse();const cur=monthKey(Date.now());if(!ms.includes(cur))ms.unshift(cur);const M=S.bMonth||'all';
-    return tabs+`<div class="tools"><label class="inline">เดือนที่ติดตั้งเสร็จ <select class="in sel-sm" id="bMonth"><option value="all" ${M==='all'?'selected':''}>ทุกเดือน</option>${ms.map(k=>`<option value="${k}" ${M===k?'selected':''}>${monthTH(k)}</option>`).join('')}</select></label><span style="margin-left:auto"></span>${pmFilterHTML()}</div>`+crewBonusHTML()}
+  if(tab==='crew'){const ms=[...new Set(visibleJobs().map(j=>crewBonusOf(j)).filter(c=>c.reached&&c.at).map(c=>monthKey(c.at)))].sort().reverse();const cur=monthKey(Date.now());if(!ms.includes(cur))ms.unshift(cur);
+    return tabs+`<div class="tools">${bPeriodTools(ms)}<span style="margin-left:auto"></span>${pmFilterHTML()}${bXlsBtn()}</div>`+crewBonusHTML()}
   return tabs+pmBonusHTML()}
 function pmBonusHTML(){const all=can('bonus.view.all');
   let jobs=visibleJobs();if(!all)jobs=jobs.filter(j=>j.pm===S.me);
@@ -522,17 +532,17 @@ function pmBonusHTML(){const all=can('bonus.view.all');
   const months=[...new Set(items.filter(x=>x.b.reached).map(x=>monthKey(x.b.at)))].sort().reverse();
   const cur=monthKey(Date.now());if(!months.includes(cur))months.unshift(cur);
   const M=S.bMonth||'all';
-  const done=items.filter(x=>x.b.reached&&(M==='all'||monthKey(x.b.at)===M)).sort((a,b)=>(b.b.at||0)-(a.b.at||0));
+  const done=items.filter(x=>x.b.reached&&bInPeriod(x.b.at)).sort((a,b)=>(b.b.at||0)-(a.b.at||0));
   const pending=items.filter(x=>!x.b.reached&&x.j.stage!=='done');
   const unpaid=done.filter(x=>!x.b.paid),paid=done.filter(x=>x.b.paid);
   const s=a=>a.reduce((t,x)=>t+x.b.amt,0);
   const people={};done.forEach(x=>{const k=x.j.pm||('n:'+(x.j.pmName||''));const p=people[k]||(people[k]={k,id:x.j.pm,name:pmName(x.j)||'ยังไม่กำหนดผู้ดูแล',n:0,kw:0,amt:0,paid:0});p.n++;p.kw+=x.b.kw;p.amt+=x.b.amt;if(x.b.paid)p.paid+=x.b.amt});
   const cfg=appCfg();const pay=can('bonus.pay');
-  return `<div class="tools"><label class="inline">เดือนที่ติดตั้งเสร็จ <select class="in sel-sm" id="bMonth"><option value="all" ${M==='all'?'selected':''}>ทุกเดือน</option>${months.map(k=>`<option value="${k}" ${M===k?'selected':''}>${monthTH(k)}</option>`).join('')}</select></label><span style="margin-left:auto"></span>${all?pmFilterHTML():'<span class="tag">แสดงเฉพาะโบนัสของคุณ</span>'}</div>
+  return `<div class="tools">${bPeriodTools(months)}<span style="margin-left:auto"></span>${all?pmFilterHTML():'<span class="tag">แสดงเฉพาะโบนัสของคุณ</span>'}${bXlsBtn()}</div>
   <div class="kpis">
     <div class="kpi hero"><span class="lbl">ถึงกำหนดจ่าย ยังไม่จ่าย</span><span class="v num">฿${fmt(s(unpaid))}</span><span class="s">${unpaid.length} งาน</span></div>
     <div class="kpi"><span class="lbl">จ่ายแล้ว</span><span class="v num" style="color:var(--good)">฿${fmt(s(paid))}</span><span class="s">${paid.length} งาน</span></div>
-    <div class="kpi"><span class="lbl">รวมโบนัส${M==='all'?'ทั้งหมด':' '+monthTH(M)}</span><span class="v num">฿${fmt(s(done))}</span><span class="s">${done.length} งานที่ติดตั้งเสร็จ</span></div>
+    <div class="kpi"><span class="lbl">รวมโบนัส${M==='all'?'ทั้งหมด':' '+bPeriodLabel()}</span><span class="v num">฿${fmt(s(done))}</span><span class="s">${done.length} งานที่ติดตั้งเสร็จ</span></div>
     <div class="kpi"><span class="lbl">รอติดตั้งเสร็จ (ประมาณการ)</span><span class="v num">฿${fmt(s(pending))}</span><span class="s">${pending.length} งาน</span></div>
   </div>
   ${all&&Object.keys(people).length?`<section class="panel"><h2>สรุปรายคน</h2><div class="tbl-wrap"><table><thead><tr><th>ผู้ดูแลโครงการ</th><th class="r">จำนวนงาน</th><th class="r">Inverter รวม</th><th class="r">โบนัสรวม</th><th class="r">จ่ายแล้ว</th><th class="r">ค้างจ่าย</th></tr></thead><tbody>
@@ -544,7 +554,7 @@ function pmBonusHTML(){const all=can('bonus.view.all');
     <td class="r num">${fmt1(b.kw)} kW${b.est?'<br><span class="muted" style="font-size:11px">ประมาณ</span>':''}</td><td class="r num">${fmt(b.base)}</td>
     <td class="r">${pay&&!b.paid?`<input class="in num adj" id="adj-${j.id}" data-adj="${j.id}" type="number" step="100" value="${b.adj||''}" placeholder="0">`:`<span class="num">${b.adj?fmt(b.adj):'–'}</span>`}</td>
     <td class="r num"><b>${fmt(b.amt)}</b></td>
-    <td>${b.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(b.paidAt)}</span>${pay?` <button class="lnk" data-bunpay="${j.id}">ยกเลิก</button>`:''}`:pay?`<button class="btn sm pri" data-bpay="${j.id}">บันทึกจ่ายแล้ว</button>`:'<span class="pst pst-blue">รอจ่าย</span>'}</td></tr>`).join('')||`<tr><td colspan="8" class="muted">ยังไม่มีงานที่ติดตั้งเสร็จ${M==='all'?'':'ในเดือนนี้'}</td></tr>`}
+    <td>${b.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(b.paidAt)}</span>${pay?` <button class="lnk" data-bunpay="${j.id}">ยกเลิก</button>`:''}`:pay?`<button class="btn sm pri" data-bpay="${j.id}">บันทึกจ่ายแล้ว</button>`:'<span class="pst pst-blue">รอจ่าย</span>'}</td></tr>`).join('')||`<tr><td colspan="8" class="muted">ยังไม่มีงานที่ติดตั้งเสร็จ${M==='all'?'':'ในช่วงนี้'}</td></tr>`}
   </tbody></table></div></section>
   ${pending.length?`<section class="panel"><h2>รอติดตั้งเสร็จ <span class="count">${pending.length}</span></h2><div class="list">${pending.map(({j,b})=>`<button class="li" data-open="${j.id}"><b>${esc(j.name)}</b><span class="num">฿${fmt(b.amt)}</span><span class="sub">${stagePill(j.stage)}<span>${esc(pmName(j)||'ยังไม่กำหนดผู้ดูแล')}</span><span class="num">Inverter ${fmt1(b.kw)} kW${b.est?' (ประมาณ)':''}</span></span></button>`).join('')}</div></section>`:''}
   <section class="panel"><h2>อัตราโบนัสตามขนาด Inverter</h2>
@@ -554,6 +564,42 @@ function pmBonusHTML(){const all=can('bonus.view.all');
     <p class="note" style="margin:0">ขั้นที่เว้นช่อง “ไม่เกิน” ว่างไว้ ใช้กับ Inverter ที่ใหญ่กว่าทุกขั้น · โบนัสถึงกำหนดเมื่องานเข้าขั้น “ติดตั้งแล้วเสร็จ” และจ่ายให้ผู้ดูแลโครงการของงาน</p>`
     :`<div class="list">${cfg.tiers.map((t,i,a)=>`<div class="li"><span>${tierLabel(t,i,a)}</span><b class="num">฿${fmt(t.amt)}</b></div>`).join('')}</div>`}
   </section>`}
+/* ---------- Job Bonus → Excel (.xlsx via SheetJS) ---------- */
+const XLSX_SRC='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+let xlsxLoad=null;
+function loadXlsx(){if(window.XLSX)return Promise.resolve();
+  return xlsxLoad||(xlsxLoad=new Promise((ok,no)=>{const sc=document.createElement('script');sc.src=XLSX_SRC;sc.onload=()=>window.XLSX?ok():no(new Error('XLSX missing'));sc.onerror=()=>{xlsxLoad=null;no(new Error('load failed'))};document.head.appendChild(sc)}))}
+const xDate=t=>t?new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}):'';
+function xSheet(rows,widths){const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=widths.map(w=>({wch:w}));return ws}
+function bonusBooks(){const all=can('bonus.view.all');const tab=all?(S.bTab||'crew'):'pm';const books=[];
+  const head=[[`SOLAR TOUCH · Job Bonus ${tab==='crew'?'ทีมช่างติดตั้ง':'ผู้ดูแลโครงการ'}`],[`ช่วงที่ติดตั้งเสร็จ: ${bPeriodLabel()}${S.pmFilter?` · ผู้ดูแลโครงการ: ${S.pmFilter==='_none'?'ยังไม่กำหนด':nm(S.pmFilter)}`:''}`],[`ส่งออกเมื่อ ${new Date().toLocaleString('th-TH')}`],[]];
+  if(tab==='crew'){
+    const done=visibleJobs().map(j=>({j,c:crewBonusOf(j)})).filter(x=>x.c.reached&&bInPeriod(x.c.at)).sort((a,b)=>(a.c.at||0)-(b.c.at||0));
+    const ppl={};done.forEach(({c})=>c.people.forEach(p=>{const k=p.name.trim();const r=ppl[k]||(ppl[k]={name:k,pos:{},n:0,days:0,amt:0,paid:0});r.n++;r.days+=p.worked!=null?p.worked:(c.days||0);r.pos[p.pos]=(r.pos[p.pos]||0)+1;r.amt+=p.amt;if(c.paid)r.paid+=p.amt}));
+    const sum=Object.values(ppl).sort((a,b)=>b.amt-a.amt).map(p=>[p.name,Object.entries(p.pos).map(([k,n])=>CREW_POS[POS_I[k]??3][1]+(n>1?' ×'+n:'')).join(', '),p.n,p.days,p.amt,p.paid,p.amt-p.paid]);
+    const tot=sum.reduce((a,r)=>[a[0]+r[2],a[1]+r[3],a[2]+r[4],a[3]+r[5],a[4]+r[6]],[0,0,0,0,0]);
+    books.push(['สรุปรายช่าง',xSheet([...head,['ช่าง','ตำแหน่งที่ทำ','จำนวนงาน','วันทำงานรวม','โบนัสรวม (บาท)','จ่ายแล้ว (บาท)','ค้างจ่าย (บาท)'],...sum,[],['รวม','',...tot]],[24,30,11,13,15,15,15])]);
+    const det=[];done.forEach(({j,c})=>{const base=[xDate(c.at),j.code,j.name,pmName(j)||'',+(+c.kw).toFixed(2),c.tier.label,c.days??'',c.lvl?LVL[c.lvl][0]:'ยังไม่ระบุวัน'];
+      if(!c.people.length)det.push([...base,'','','','',c.paid?'จ่ายแล้ว':'รอจ่าย','']);
+      c.people.forEach(p=>det.push([...base,p.name,CREW_POS[POS_I[p.pos]??3][1],p.worked!=null?p.worked:(c.days??''),p.amt,c.paid?'จ่ายแล้ว':'รอจ่าย',c.paid?xDate(c.paidAt):'']))});
+    books.push(['รายละเอียดรายงาน',xSheet([...head,['ติดตั้งเสร็จ','รหัสงาน','ลูกค้า','ผู้ดูแลโครงการ','Inverter (kW)','ขั้น','วันติดตั้ง','ระดับ','ช่าง','ตำแหน่ง','วันที่มาทำ','โบนัส (บาท)','สถานะ','วันที่จ่าย'],...det,[],['รวม','','','','','','','','','','',det.reduce((a,r)=>a+(+r[11]||0),0)]],[13,15,26,20,12,8,10,22,20,15,11,12,10,13])]);
+  }else{
+    let jobs=visibleJobs();if(!all)jobs=jobs.filter(j=>j.pm===S.me);
+    const done=jobs.map(j=>({j,b:bonusOf(j)})).filter(x=>x.b.reached&&bInPeriod(x.b.at)).sort((a,b)=>(a.b.at||0)-(b.b.at||0));
+    const ppl={};done.forEach(({j,b})=>{const k=j.pm||('n:'+(j.pmName||''));const r=ppl[k]||(ppl[k]={name:pmName(j)||'ยังไม่กำหนดผู้ดูแล',n:0,kw:0,amt:0,paid:0});r.n++;r.kw+=b.kw;r.amt+=b.amt;if(b.paid)r.paid+=b.amt});
+    const sum=Object.values(ppl).sort((a,b)=>b.amt-a.amt).map(p=>[p.name,p.n,+p.kw.toFixed(2),p.amt,p.paid,p.amt-p.paid]);
+    books.push(['สรุปรายคน',xSheet([...head,['ผู้ดูแลโครงการ','จำนวนงาน','Inverter รวม (kW)','โบนัสรวม (บาท)','จ่ายแล้ว (บาท)','ค้างจ่าย (บาท)'],...sum,[],['รวม',...sum.reduce((a,r)=>[a[0]+r[1],+(a[1]+r[2]).toFixed(2),a[2]+r[3],a[3]+r[4],a[4]+r[5]],[0,0,0,0,0])]],[26,11,16,15,15,15])]);
+    const det=done.map(({j,b})=>[xDate(b.at),j.code,j.name,pmName(j)||'',+(+b.kw).toFixed(2),b.base,b.adj||0,b.amt,b.paid?'จ่ายแล้ว':'รอจ่าย',b.paid?xDate(b.paidAt):'',b.note||'']);
+    books.push(['รายละเอียดรายงาน',xSheet([...head,['ติดตั้งเสร็จ','รหัสงาน','ลูกค้า','ผู้ดูแลโครงการ','Inverter (kW)','อัตรา (บาท)','ปรับ +/- (บาท)','โบนัส (บาท)','สถานะ','วันที่จ่าย','หมายเหตุ'],...det,[],['รวม','','','','','','',det.reduce((a,r)=>a+r[7],0)]],[13,15,26,20,12,12,13,12,10,13,24])]);
+  }
+  return{tab,books}}
+async function bonusXlsx(btn){if(btn)btn.disabled=true;
+  try{await loadXlsx();const {tab,books}=bonusBooks();const wb=XLSX.utils.book_new();books.forEach(([n,ws])=>XLSX.utils.book_append_sheet(wb,ws,n));
+    const per=(S.bMonth||'all')==='all'?'ทั้งหมด':(S.bMonth==='custom'?`${S.bFrom||'เริ่ม'}_${S.bTo||'ล่าสุด'}`:S.bMonth);
+    const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    await saveFile(`JobBonus-${tab==='crew'?'ทีมช่าง':'ผู้ดูแลโครงการ'}-${per}.xlsx`,buf,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
+  catch(e){console.error(e);toast('ส่งออก Excel ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่')}
+  finally{if(btn)btn.disabled=false}}
 function saveTiers(tiers){const t=[...tiers].sort((a,b)=>(+a.upTo>0?+a.upTo:1e9)-(+b.upTo>0?+b.upTo:1e9));return upsert('settings','app',{tiers:t},S.settings).catch(writeErr)}
 function saveBonus(id,data){return upsert('bonus',id,{job:id,...data},S.bonus.get(id)).catch(writeErr)}
 
@@ -607,7 +653,7 @@ function saveCrew(id,crew){return saveJob(id,{crew})}
 function crewBonusHTML(){const all=can('bonus.view.all');if(!all)return'';
   const M=S.bMonth||'all';const pay=can('bonus.pay');
   const items=visibleJobs().map(j=>({j,c:crewBonusOf(j)}));
-  const done=items.filter(x=>x.c.reached&&(M==='all'||monthKey(x.c.at)===M)).sort((a,b)=>(b.c.at||0)-(a.c.at||0));
+  const done=items.filter(x=>x.c.reached&&bInPeriod(x.c.at)).sort((a,b)=>(b.c.at||0)-(a.c.at||0));
   const unpaid=done.filter(x=>!x.c.paid&&x.c.total>0),paid=done.filter(x=>x.c.paid);
   const s=a=>a.reduce((t,x)=>t+x.c.total,0);
   const cnt=l=>done.filter(x=>x.c.lvl===l).length;
@@ -629,7 +675,7 @@ function crewBonusHTML(){const all=can('bonus.view.all');if(!all)return'';
     <td class="r num">${c.days!=null?fmt1(c.days)+' วัน':'–'}<br><span class="muted" style="font-size:11px">S≤${c.tier.smax} N≤${c.tier.max}</span></td>
     <td>${lvlPill(c.lvl)}</td><td>${c.people.length?c.people.map(p=>`<span class="crewchip">${esc(p.name)} <i>${esc(CREW_POS[POS_I[p.pos]??3][1])}${p.part?` · ${fmt1(p.worked)} วัน`:''}</i></span>`).join(' '):'<span class="muted">ยังไม่ระบุ</span>'}</td>
     <td class="r num"><b>${fmt(c.total)}</b></td>
-    <td>${c.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(c.paidAt)}</span>${pay?` <button class="lnk" data-cunpay="${j.id}">ยกเลิก</button>`:''}`:pay&&c.total>0?`<button class="btn sm pri" data-cpay="${j.id}">บันทึกจ่ายแล้ว</button>`:c.total>0?'<span class="pst pst-blue">รอจ่าย</span>':'–'}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">ยังไม่มีงานที่ติดตั้งเสร็จ${M==='all'?'':'ในเดือนนี้'}</td></tr>`}
+    <td>${c.paid?`<span class="pst pst-good">จ่ายแล้ว ${dTH(c.paidAt)}</span>${pay?` <button class="lnk" data-cunpay="${j.id}">ยกเลิก</button>`:''}`:pay&&c.total>0?`<button class="btn sm pri" data-cpay="${j.id}">บันทึกจ่ายแล้ว</button>`:c.total>0?'<span class="pst pst-blue">รอจ่าย</span>':'–'}</td></tr>`).join('')||`<tr><td colspan="7" class="muted">ยังไม่มีงานที่ติดตั้งเสร็จ${M==='all'?'':'ในช่วงนี้'}</td></tr>`}
   </tbody></table></div></section>
   <section class="panel"><h2>ตารางโบนัสทีมช่าง</h2>
   <div class="tbl-wrap"><table class="crewtbl"><thead><tr><th rowspan="2">kW Inverter</th><th rowspan="2">ไม่เกิน (kW)</th><th rowspan="2">คาดหวัง (วัน)</th><th colspan="5" class="grp-n">Normal</th><th colspan="5" class="grp-s">Special</th>${ed?'<th rowspan="2"></th>':''}</tr>
@@ -1075,6 +1121,7 @@ document.addEventListener('click',e=>{
   else if(a==='pptx')proposalPptx({id:S.open,...j},t);
   else if(a==='savequote')saveFile(`ใบเสนอราคา-${j.code}.html`,quoteDoc(j,false),'text/html');
   else if(a==='copyquote')copy(quoteText(j),'คัดลอกแล้ว วางในไลน์หรืออีเมลได้เลย');
+  else if(a==='bonusxlsx')bonusXlsx(t);
   else if(a==='csv')saveFile(`solartouch-jobs-${new Date().toISOString().slice(0,10)}.csv`,csv(),'text/csv');
   else if(a==='pdf'){t.disabled=true;photoPDF({id:S.open,...j}).catch(err=>{console.error(err);toast('สร้าง PDF ไม่สำเร็จ')}).finally(()=>{if(t.isConnected)t.disabled=false})}
   else if(a==='mapfit')fitAll();
@@ -1087,7 +1134,8 @@ document.addEventListener('submit',e=>{const f=e.target;
 });
 document.addEventListener('change',e=>{const el=e.target;
   if(el.id==='pmFilter'){S.pmFilter=el.value;renderView();return}
-  if(el.id==='bMonth'){S.bMonth=el.value;renderView();return}
+  if(el.id==='bMonth'){S.bMonth=el.value;if(el.value==='custom'&&!S.bFrom&&!S.bTo){const n=new Date();S.bFrom=ymd(new Date(n.getFullYear(),n.getMonth(),1));S.bTo=ymd(n)}renderView();return}
+  if(el.id==='bFrom'||el.id==='bTo'){S[el.id]=el.value;renderView();return}
   if(el.id==='crewProrate'){upsert('settings','app',{crewProrate:el.value},S.settings).catch(writeErr);return}
   if(el.dataset.inst){const j=S.jobs.get(S.open);if(!j)return;const k=el.dataset.inst;const v=k==='days'?(+el.value||null):el.value;saveJob(S.open,{inst:{[k]:v}},k==='days'?`บันทึกวันทำงานจริง ${v||'-'} วัน`:`บันทึก${k==='start'?'วันเริ่ม':'วันเสร็จ'}ติดตั้ง ${v}`);return}
   if(el.dataset.crew!=null){const j=S.jobs.get(S.open);if(!j)return;const c=(j.crew||[]).map(x=>({...x}));const r=c[+el.dataset.crew];if(!r)return;r[el.dataset.k]=el.dataset.k==='days'?(+el.value>0?+el.value:null):el.value;
