@@ -114,7 +114,7 @@ function buildItems(j){
   return[
     {d:`แผงโซลาร์ Mono ${W}W (Tier 1) รับประกันประสิทธิภาพ 25 ปี`,q:n,u:'แผง',p:3900},
     {d:`อินเวอร์เตอร์ ${hyb?'Hybrid':'On-Grid'} ${kw} kW ${three?'3':'1'} เฟส (อยู่ในบัญชีการไฟฟ้า)`,q:1,u:'เครื่อง',p:Math.round(inv*(hyb?1.35:1))},
-    ...(hyb?[{d:'แบตเตอรี่ลิเธียม LFP 5.12 kWh',q:1,u:'ชุด',p:55000}]:[]),
+    ...(hyb?[{d:'แบตเตอรี่ลิเธียม LFP 5 kWh',q:1,u:'ชุด',p:55000}]:[]),
     {d:'รางอะลูมิเนียมและอุปกรณ์ยึดหลังคา',q:n,u:'ชุด',p:950},
     {d:'ตู้ DC/AC Protection (เบรกเกอร์ / Surge / ฟิวส์)',q:1,u:'ตู้',p:9500},
     {d:'สาย PV1-F, สาย AC, ท่อร้อยสาย และกราวด์',q:1,u:'งาน',p:7500},
@@ -197,7 +197,8 @@ function teamOpts(sel,withOther){const ids=teamIds().sort((a,b)=>nm(a).localeCom
   return `<option value="">— ยังไม่กำหนด —</option>${ids.map(id=>`<option value="${esc(id)}" ${sel===id?'selected':''}>${esc(nm(id))}${id===S.me?' (คุณ)':''}</option>`).join('')}${withOther?`<option value="_other" ${sel==='_other'?'selected':''}>อื่นๆ (พิมพ์ชื่อเอง)</option>`:''}`}
 
 /* ---------- demo data ---------- */
-function demoJobs(){const D=86400000,now=Date.now(),today=new Date();const dd=n=>ymd(new Date(today.getFullYear(),today.getMonth(),today.getDate()+n));
+function demoJobs(){const js=demoJobsBase();js[0].proposal={mode:'bill',bill:3500,tariff:4.4,dayPct:65,maxKwp:6};js[1].proposal={mode:'bill',bill:6000,tariff:4.4,dayPct:60,maxKwp:8.45};return js}
+function demoJobsBase(){const D=86400000,now=Date.now(),today=new Date();const dd=n=>ymd(new Date(today.getFullYear(),today.getMonth(),today.getDate()+n));
   const mk=(f,stage,agoD,perm=[],extra={})=>{const j=makeJob(f,{demo:true});const at=now-agoD*D;j.stage=stage;j.stageAt=at;j.createdAt=at-5*D;j.updatedAt=at;j.steps={};STAGES.slice(0,SIDX[stage]+1).forEach((s,i)=>j.steps[s.k]=at-(SIDX[stage]-i)*2*D);perm.forEach(k=>j.permits[k]={done:true,at,by:S.me});j.log=[{t:j.createdAt,by:S.me,m:'สร้างงานใหม่ (ตัวอย่าง)'},{t:at,by:S.me,m:`ย้ายไปขั้น “${STAGES[SIDX[stage]].t}”`}];Object.assign(j,extra);return j};
   const T=[...S.team];
   return[
@@ -704,9 +705,9 @@ function renderDrawer(force){
     <div class="stage-row"><span class="now">ขั้นที่ ${i+1}/${STAGES.length} · ${esc(STAGES[i].t)}<small>อยู่ในขั้นนี้ ${days(j.stageAt)} วัน · เริ่ม ${dTH(j.stageAt)}</small></span>
       ${i>0?`<button class="btn sm" data-stage="${STAGES[i-1].k}" ${dis}>← ย้อน</button>`:''}
       ${i<STAGES.length-1?`<button class="btn sm pri" data-stage="${STAGES[i+1].k}" ${dis}>ขั้นถัดไป: ${esc(STAGES[i+1].s)} →</button>`:''}</div>
-    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],...(can('bonus.view.all')||JW()?[['crew',`ทีมช่าง${(j.crew||[]).filter(c=>c&&c.name).length?` (${(j.crew||[]).filter(c=>c&&c.name).length})`:''}`]]:[]),['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
+    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา'],['proposal','Proposal']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],...(can('bonus.view.all')||JW()?[['crew',`ทีมช่าง${(j.crew||[]).filter(c=>c&&c.name).length?` (${(j.crew||[]).filter(c=>c&&c.name).length})`:''}`]]:[]),['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
   </div>
-  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='crew'?crewTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
+  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='proposal'&&can('quote.view')?proposalTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='crew'?crewTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
   el.querySelector('.d-body').scrollTop=bodyScroll;
   const at=el.querySelector('.tabs [aria-selected="true"]');if(at){const tb=at.parentElement;if(at.offsetLeft+at.offsetWidth>tb.scrollLeft+tb.clientWidth||at.offsetLeft<tb.scrollLeft)tb.scrollLeft=at.offsetLeft-24}
   if(S.tab==='info')initMini(j);
@@ -778,6 +779,56 @@ function quoteTab(j,dis){const t=quoteTotals(j);const e=estimate(j);const items=
   </div>
   <div class="acts">${BK.kind!=='artifact'?`<button class="btn pri" data-act="printquote">พิมพ์ / บันทึกเป็น PDF</button>`:''}${canDownload()?`<button class="btn ${BK.kind==='artifact'?'pri':''}" data-act="savequote">ดาวน์โหลดใบเสนอราคา (.html)</button>`:''}<button class="btn" data-act="copyquote">คัดลอกสรุปส่งลูกค้า</button></div>`;
 }
+
+/* ---------- Proposal (.pptx) ---------- */
+const fk2=n=>(+n||0).toLocaleString('th-TH',{maximumFractionDigits:2});
+const PPTX_SRC='https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js';
+let pptxLoad=null;
+function loadPptx(){if(window.PptxGenJS&&window.JSZip)return Promise.resolve();
+  return pptxLoad||(pptxLoad=new Promise((ok,no)=>{const sc=document.createElement('script');sc.src=PPTX_SRC;sc.onload=()=>window.PptxGenJS?ok():no(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxLoad=null;no(new Error('load failed'))};document.head.appendChild(sc)}))}
+function ppIn(j){const p=j.proposal||{};const d=(window.ST_PROPOSAL&&ST_PROPOSAL.DEFAULTS)||{};
+  return{phase:j.phase||'1',mode:p.mode||'bill',bill:p.bill??'',units:p.units??'',tariff:p.tariff??d.tariff,dayPct:p.dayPct??d.dayPct,maxKwp:p.maxKwp??'',brand:p.brand||d.brand||'GoodWe',backupW:p.backupW??d.backupW,yield:p.yield??d.yield,rec:p.rec||''}}
+function proposalTab(j,dis){
+  if(!window.ST_PROPOSAL)return `<div class="banner soft"><span>โหลดส่วน Proposal ไม่สำเร็จ ลองรีเฟรชหน้าเว็บ</span></div>`;
+  const p=ppIn(j);const D=ST_PROPOSAL.calc(p);
+  const num=(k,step,ph)=>`<input class="in num" id="pp-${k}" data-pp="${k}" type="number" step="${step}" min="0" value="${esc(p[k])}"${ph?` placeholder="${esc(ph)}"`:''} ${dis}>`;
+  const fld=(id,label,inner,note)=>`<div class="fld"><label for="${id}">${label}</label>${inner}${note?`<span class="note">${note}</span>`:''}</div>`;
+  const form=`<div class="form">
+    ${fld('pp-phase','มิเตอร์',`<select class="in" id="pp-phase" data-f="phase" ${dis}>${opt([['1','1 เฟส'],['3','3 เฟส']],p.phase)}</select>`)}
+    ${fld('pp-brand','ยี่ห้ออินเวอร์เตอร์',`<select class="in" id="pp-brand" data-pp="brand" ${dis}>${opt(Object.keys(ST_PROPOSAL.DEFAULTS.inverters1).map(b=>[b,b]),p.brand)}</select>`,p.phase==='3'?'':`1 เฟส: ${['ongrid','hybrid'].map(t=>`${t==='ongrid'?'On-Grid':'Hybrid'} ${ST_PROPOSAL.DEFAULTS.inverters1[p.brand][t].join(', ')} kW`).join(' · ')}`)}
+    ${fld('pp-mode','คิดจาก',`<select class="in" id="pp-mode" data-pp="mode" ${dis}>${opt([['bill','ค่าไฟต่อเดือน (บาท)'],['units','จำนวนหน่วยต่อเดือน']],p.mode)}</select>`)}
+    ${p.mode==='units'?fld('pp-units','ใช้ไฟต่อเดือน (หน่วย)',num('units','1','เช่น 1,300')):fld('pp-bill','ค่าไฟต่อเดือน (บาท)',num('bill','1','เช่น 6,000'))}
+    ${fld('pp-tariff','ค่าไฟเฉลี่ย (บาท/หน่วย)',num('tariff','0.01'))}
+    ${fld('pp-dayPct','ใช้ไฟกลางวัน (%)',num('dayPct','1'),`กลางคืน ${Math.max(0,100-(+p.dayPct||0))}%`)}
+    ${fld('pp-maxKwp','พื้นที่ติดตั้งได้ประมาณ (kWp)',num('maxKwp','0.01','จากการสำรวจหน้างาน'),'Option ที่ต้องใช้ขนาดเกินนี้จะถูกตัดออก')}
+    ${fld('pp-backupW','โหลดในตู้ Backup (W)',num('backupW','10'),'ใช้คำนวณชั่วโมงไฟสำรองตอนไฟดับ')}
+    ${fld('pp-yield','ผลิตไฟ (หน่วย/kWp/วัน)',num('yield','0.1'))}
+  </div>`;
+  if(!D.ok)return form+`<div class="banner soft"><span>${esc(D.why)} เพื่อคำนวณ Option</span></div>`;
+  const notes=[];
+  if(!D.maxKwp)notes.push('ยังไม่ได้กรอกพื้นที่ติดตั้ง ระบบจะเสนอทุก Option');
+  if(D.dropped.length&&!D.opts[0].sizedToRoof)notes.push('ตัดออกเพราะเกินพื้นที่: '+D.dropped.map(x=>`${x.name} ${fk2(x.kwp)} kWp`).join(', '));
+  if(D.opts[0].sizedToRoof)notes.push(`ทุก Option เกินพื้นที่ จึงเสนอ On-Grid ขนาดเต็มพื้นที่ ${fk2(D.opts[0].kwp)} kWp`);
+  D.capped.forEach(c=>notes.push(`${c.name}: ${D.brand} มีอินเวอร์เตอร์ 1 เฟสใหญ่สุด ${c.inv} kW ใส่แผงได้ไม่เกิน ${fk2(c.kwp)} kWp (${ST_PROPOSAL.DEFAULTS.dcAcMax} เท่า)`));
+  const rows=D.opts.map((o,k)=>`<tr><td><b>${esc(o.name)}</b></td><td class="num">${fk2(o.kwp)} kWp<br><small class="muted">${o.pan} แผง</small></td><td class="num">${o.inv} kW${o.dcac>1?`<br><small class="muted">แผง ${o.dcac} เท่า</small>`:''}</td><td class="num">${o.hyb?fmt1(o.batt)+' kWh':'–'}</td><td class="r num">฿${fmt(o.save)}<br><small class="muted">${o.pct}%</small></td><td class="r num">฿${fmt(o.cost)}</td><td class="r num">${o.payback} ปี</td><td>${JW()&&!dis?`<button class="btn sm" data-useopt="${k}">ใช้ในใบเสนอราคา</button>`:''}</td></tr>`).join('');
+  return `${form}
+  <div class="stage-row"><span class="now">ใช้ไฟ ${fmt(D.kwh)} หน่วย/เดือน${p.mode==='units'?` · ค่าไฟราว ฿${fmt(D.bill)}`:''}<small>กลางวัน ${fmt1(D.dD)} หน่วย/วัน · กลางคืน ${fmt1(D.nD)} หน่วย/คืน</small></span></div>
+  ${notes.map(n=>`<div class="banner soft"><span>${esc(n)}</span></div>`).join('')}
+  <div class="tbl-wrap"><table class="qt"><thead><tr><th>Option</th><th>ขนาด</th><th>อินเวอร์เตอร์</th><th>แบตเตอรี่</th><th class="r">ประหยัด/เดือน</th><th class="r">ราคารวม VAT</th><th class="r">คืนทุน</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="acts">${canDownload()?`<button class="btn pri" data-act="pptx">ดาวน์โหลด Proposal (.pptx)</button>`:''}</div>
+  <span class="note">ไฟล์ PowerPoint แก้ไขได้ทุกหน้า มีกรอบให้คลิกใส่รูปหลังคา อุปกรณ์จริง และผลงานที่ผ่านมา · ราคาเป็นราคามาตรฐาน แก้ได้ในไฟล์ proposal.js</span>`;
+}
+async function proposalPptx(j,btn){const D=ST_PROPOSAL.calc(ppIn(j));if(!D.ok){toast(D.why);return}
+  btn.disabled=true;const old=btn.textContent;btn.textContent='กำลังสร้างไฟล์…';
+  try{await loadPptx();
+    const WHEN={deal:'เมื่ออนุมัติ',install:'เมื่อติดตั้งแล้วเสร็จ',done:'เมื่อ COD'};
+    const meta={customer:j.name,addr:[j.addr,j.prov].filter(Boolean).join(' '),date:new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'}),
+      terms:appCfg().installments.filter(x=>+x.pct>0).map(x=>({pct:+x.pct,label:x.label,when:WHEN[x.stage]||('เมื่อ'+((STAGES[SIDX[x.stage]]||{}).s||''))})),proposer:{name:pmName(j)||nm(S.me)}};
+    const buf=await ST_PROPOSAL.makePptx(window.PptxGenJS,window.JSZip,D,meta,{icons:window.ST_PROPOSAL_ICONS,logo:String(window.SOLARTOUCH_LOGO||'').replace(/^data:/,'')});
+    await saveFile(`Proposal-${j.code}.pptx`,buf,'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    saveJob(j.id,{},`สร้าง Proposal (.pptx) ${D.opts.map(o=>`${o.name} ${fk2(o.kwp)} kWp`).join(' / ')}`);
+  }catch(e){console.error(e);toast('สร้าง Proposal ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่')}
+  finally{if(btn.isConnected){btn.disabled=false;btn.textContent=old}}}
 function permitTab(j,dis){const pp=permitProg(j);const p=j.permits||{};const g=j.grid||{};const auth=j.util==='MEA'?'กฟน. (MEA)':'กฟภ. (PEA)';
   return `<div class="sect"><div class="prog"><span class="lbl">เอกสารพร้อม</span><span class="bar"><i style="width:${pp.pct}%"></i></span><span class="num"><b>${pp.d}</b>/${pp.n}</span></div>
   <div class="docs">${DOCS.map(gr=>`<div class="authority">${esc(gr.a)}</div>${gr.items.map(([k,t])=>{const d=p[k]||{};return `<label class="doc ${d.done?'done':''}"><input type="checkbox" id="pd-${k}" data-doc="${k}" ${d.done?'checked':''} ${dis}><span class="t">${esc(t)}</span><span class="who muted">${d.done?esc(nm(d.by)):''}</span>${d.done?`<span class="meta">เรียบร้อย ${tTH(d.at)}</span>`:''}</label>`}).join('')}`).join('')}</div></div>
@@ -965,8 +1016,11 @@ function addAppt(jobId,f){const j=S.jobs.get(jobId);if(!j||!f.date)return;const 
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy]');if(!t)return;
+  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy],[data-useopt]');if(!t)return;
   if(t.matches('[data-copy]')){copy(t.dataset.copy,'คัดลอกอีเมลแล้ว');return}
+  if(t.matches('[data-useopt]')){const id=S.open,j=S.jobs.get(id);if(!j||!window.ST_PROPOSAL)return;const o=ST_PROPOSAL.calc(ppIn(j)).opts[+t.dataset.useopt];if(!o)return;
+    const go=()=>saveJob(id,{kw:o.kwp,type:o.hyb?'hybrid':'ongrid',inv:o.inv,quote:{items:o.items.map(x=>({...x}))},proposal:{rec:o.name}},`ใช้ ${o.name} ${fk2(o.kwp)} kWp จาก Proposal ในใบเสนอราคา`).then(()=>{S.tab='quote';renderDrawer(true);toast('สร้างรายการใบเสนอราคาจาก Proposal แล้ว')});
+    (j.quote?.items||[]).length?arm(t,'แทนที่รายการเดิม? กดอีกครั้ง',go):go();return}
   if(t.matches('[data-btab]')){S.bTab=t.dataset.btab;renderView();return}
   if(t.matches('[data-rmcrew]')){const j=S.jobs.get(S.open);const c=[...(j.crew||[])];c.splice(+t.dataset.rmcrew,1);saveCrew(S.open,c);return}
   if(t.dataset.cpay){const j=S.jobs.get(t.dataset.cpay);const c=crewBonusOf({id:t.dataset.cpay,...j});saveBonus(t.dataset.cpay,{crewPaid:true,crewPaidAt:Date.now(),crewPaidBy:S.me,crewAmt:c.total,crewList:c.people.map(p=>({name:p.name,pos:p.pos,amt:p.amt}))}).then(()=>toast(`บันทึกจ่ายโบนัสทีมช่าง ฿${fmt(c.total)} แล้ว`));return}
@@ -1018,6 +1072,7 @@ document.addEventListener('click',e=>{
   else if(a==='additem'){const items=[...(j.quote?.items||[]),{d:'รายการใหม่',q:1,u:'งาน',p:0}];saveJob(S.open,{quote:{items}})}
   else if(a==='gen'){const go=()=>saveJob(S.open,{quote:{items:buildItems(j)}},'สร้างรายการใบเสนอราคาใหม่จากขนาดระบบ');(j.quote?.items||[]).length?arm(t,'แทนที่รายการเดิม? กดอีกครั้ง',go):go()}
   else if(a==='printquote')printQuote(j);
+  else if(a==='pptx')proposalPptx({id:S.open,...j},t);
   else if(a==='savequote')saveFile(`ใบเสนอราคา-${j.code}.html`,quoteDoc(j,false),'text/html');
   else if(a==='copyquote')copy(quoteText(j),'คัดลอกแล้ว วางในไลน์หรืออีเมลได้เลย');
   else if(a==='csv')saveFile(`solartouch-jobs-${new Date().toISOString().slice(0,10)}.csv`,csv(),'text/csv');
@@ -1065,6 +1120,7 @@ $('#drawer').addEventListener('change',e=>{const el=e.target;const id=S.open;con
   else if(el.dataset.loc){const v=el.value.trim();const p=parseLoc(v);if(!v){saveJob(id,{lat:null,lng:null,mapUrl:''},'ลบตำแหน่ง');return}
     if(p)saveJob(id,{lat:p.lat,lng:p.lng,mapUrl:/^https?:/.test(v)?v:''},'บันทึกตำแหน่ง Google Maps');
     else{saveJob(id,{mapUrl:/^https?:/.test(v)?v:''},'บันทึกลิงก์ Google Maps');toast('อ่านพิกัดจากลิงก์นี้ไม่ได้ (ลิงก์ย่อ) ปุ่มเปิดใน Google Maps ยังใช้ได้ ถ้าจะแสดงบนแผนที่ให้วางตัวเลขพิกัดแทน')}}
+  else if(el.dataset.pp){const k=el.dataset.pp;const v=(k==='mode'||k==='rec'||k==='brand')?el.value:(el.value===''?'':Math.max(0,+el.value||0));if((j.proposal||{})[k]===v)return;saveJob(id,{proposal:{[k]:v}})}
   else if(el.dataset.q){const k=el.dataset.q;let v=el.value;if(k!=='status')v=+v||0;const SL={draft:'ร่าง',sent:'ส่งลูกค้าแล้ว',approved:'ลูกค้าอนุมัติ',rejected:'ไม่ผ่าน'};saveJob(id,{quote:{[k]:v}},k==='status'?`ใบเสนอราคา: ${SL[v]}`:null)}
   else if(el.dataset.i!=null){const items=(j.quote?.items||[]).map(x=>({...x}));const it=items[+el.dataset.i];if(!it)return;it[el.dataset.k]=(el.dataset.k==='q'||el.dataset.k==='p')?(+el.value||0):el.value;saveJob(id,{quote:{items}})}
   else if(el.dataset.doc){const k=el.dataset.doc;const txt=DOCS.flatMap(g=>g.items).find(x=>x[0]===k)[1];saveJob(id,{permits:{[k]:{done:el.checked,at:Date.now(),by:S.me}}},`${el.checked?'✓':'ยกเลิก'} ${txt}`)}

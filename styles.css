@@ -226,6 +226,8 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
 .qt tbody tr:hover td{background:none}
 .qt .in{height:34px;padding:0 8px;font-size:13.5px}
 .qt td.c-d{min-width:200px}
+.qt td.num{white-space:nowrap}
+.qt td small{font-size:11.5px}
 .qt td.c-q{width:72px}.qt td.c-u{width:70px}.qt td.c-p{width:104px}
 .qt td.c-a{width:96px;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 .qt .rm{border:0;background:none;color:var(--ink-3);width:28px;height:28px;border-radius:6px}

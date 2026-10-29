@@ -1,7 +1,7 @@
 // Service worker: cache the app shell so the site opens fast and works offline.
 // Team data is cached separately by Firestore's own offline storage.
-const CACHE='solartouch-v5';
-const SHELL=['./','index.html','styles.css','vendor/leaflet.css','app.js','firebase-config.js','manifest.webmanifest','favicon.png','icon-192.png','logo.png','logo-data.js'];
+const CACHE='solartouch-v9';
+const SHELL=['./','index.html','styles.css','vendor/leaflet.css','app.js','firebase-config.js','manifest.webmanifest','favicon.png','icon-192.png','logo.png','logo-data.js','proposal.js','proposal-assets.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{

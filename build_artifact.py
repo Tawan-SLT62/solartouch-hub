@@ -13,9 +13,12 @@ shell = re.search(r"<!--SHELL-->(.*?)<!--/SHELL-->", index, re.S).group(1)
 css = (root / "styles.css").read_text(encoding="utf-8")
 app = (root / "app.js").read_text(encoding="utf-8")
 logo_js = (root / "logo-data.js").read_text(encoding="utf-8")
+proposal_js = (root / "proposal.js").read_text(encoding="utf-8")
+proposal_assets = (root / "proposal-assets.js").read_text(encoding="utf-8")
 logo_uri = logo_js.split('"')[1]
 shell = shell.replace('src="logo.png"', f'src="{logo_uri}"')
-assert "</script" not in app.replace("<\\/script", ""), "app.js must not contain a raw closing script tag"
+for name, src in (("app.js", app), ("proposal.js", proposal_js)):
+    assert "</script" not in src.replace("<\\/script", ""), f"{name} must not contain a raw closing script tag"
 
 page = f"""<title>SOLARTOUCH Project Hub</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -30,6 +33,12 @@ page = f"""<title>SOLARTOUCH Project Hub</title>
 <script>window.SOLARTOUCH_ARTIFACT=true;window.SOLARTOUCH_CONFIG={{}};</script>
 <script>
 {logo_js}
+</script>
+<script>
+{proposal_js}
+</script>
+<script>
+{proposal_assets}
 </script>
 <script>
 {app}
