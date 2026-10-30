@@ -18,23 +18,41 @@
     battDod: 0.9, battEff: 0.92,
     mountPerPanel: 950, protection: 9500, cables: 7500, laborPerKwp: 2500, engineering: 12000,
     hybridInvFactor: 1.35, vat: 0.07, degradation: 0.005,
-    brand: 'GoodWe',      // ยี่ห้ออินเวอร์เตอร์เริ่มต้น
+    brand: 'GoodWe',      // ยี่ห้ออินเวอร์เตอร์เริ่มต้น (เลือกได้หลายยี่ห้อในหน้า Proposal เพื่อเทียบราคา)
+    // ราคาอินเวอร์เตอร์แยกยี่ห้อ (บาท) ขนาดที่ไม่ได้ใส่ไว้จะใช้ราคามาตรฐานตามขนาด
+    invPrices: { // แยกตามมิเตอร์ 1 เฟส / 3 เฟส
+      1: {
+        GoodWe: { ongrid: { 5: 36000 }, hybrid: { 5: 48600, 6: 83700, 10: 83700 } },
+        Huawei: { ongrid: { 5: 36000, 10: 62000 }, hybrid: { 5: 48600, 10: 83700 } }
+      },
+      3: {
+        GoodWe: { ongrid: { 10: 62000, 15: 95000, 20: 95000 }, hybrid: { 10: 83700, 15: 128250, 20: 128250 } },
+        Huawei: { ongrid: { 10: 62000, 15: 95000, 20: 95000 }, hybrid: { 10: 83700, 15: 128250, 20: 128250 } }
+      }
+    },
     dcAcMax: 1.5,         // ใส่แผงเกินขนาดอินเวอร์เตอร์ได้สูงสุดกี่เท่า (kWp ÷ kW)
     // มิเตอร์ 1 เฟส: ขนาดอินเวอร์เตอร์ที่มีขาย (kW)
     inverters1: {
       GoodWe: { ongrid: [5], hybrid: [5, 6, 10] },
       Huawei: { ongrid: [5, 10], hybrid: [5, 10] }
     },
+    // มิเตอร์ 3 เฟส: ขนาดอินเวอร์เตอร์ที่มีขาย (kW)
+    inverters3: {
+      GoodWe: { ongrid: [10, 15, 20], hybrid: [10, 15, 20] },
+      Huawei: { ongrid: [10, 15, 20], hybrid: [10, 15, 20] }
+    },
+    sellRate: 2.2,        // ราคารับซื้อไฟคืน (บาท/หน่วย) ค่าเริ่มต้น
     peakFactor: 0.7,      // พีคเฉลี่ยทั้งปี ≈ 70% ของกำลังติดตั้ง
     company: { name: 'Solar Touch Company Limited', phone: '098-246-3030', web: 'www.solartouch.co.th' }
   };
   const STD_INV = [3, 5, 6, 8, 10, 12, 15, 20, 25, 30];
-  const invPrice = (kw, hyb, P) => Math.round((kw <= 3 ? 28000 : kw <= 5 ? 36000 : kw <= 10 ? 62000 : 95000) * (hyb ? P.hybridInvFactor : 1));
+  const invStd = (kw, hyb, P) => Math.round((kw <= 3 ? 28000 : kw <= 5 ? 36000 : kw <= 10 ? 62000 : 95000) * (hyb ? P.hybridInvFactor : 1));
+  const invPrice = (kw, hyb, P, brand, phase) => { const t = (((P.invPrices || {})[phase] || {})[brand] || {})[hyb ? 'hybrid' : 'ongrid'] || {}; return t[kw] != null ? +t[kw] : invStd(kw, hyb, P); };
   // [ชื่อ, ไฮบริด, ลำดับแบตเตอรี่ใน DEFAULTS.batteries]
-  const OPT_DEFS = [['On-Grid', false, -1], ['Hybrid', true, 0], ['Hybrid แบตใหญ่', true, 1]];
+  const OPT_DEFS = [['On-Grid', false, -1, 'ongrid'], ['Hybrid', true, 0, 'hybrid'], ['Hybrid แบตใหญ่', true, 1, 'hybrid2']];
 
   /* ---------- calculation ---------- */
-  // input: {phase, mode:'bill'|'units', bill, units, tariff, dayPct, maxKwp, backupW, yield, rec}
+  // input: {phase, mode:'bill'|'units', bill, units, tariff, dayPct, maxKwp, backupW, yield, brands:[...], off:[option keys]}
   function calc(input, over) {
     const P = Object.assign({}, DEFAULTS, over || {});
     const i = input || {};
@@ -47,35 +65,54 @@
     const kwh = i.mode === 'units' ? (+i.units || 0) : (+i.bill || 0) / T;
     const bill = i.mode === 'units' ? kwh * T : (+i.bill || 0);
     const maxKwp = +i.maxKwp > 0 ? +i.maxKwp : null;
-    const D = { T, Y, W, day, phase, kwh, bill, backupW, maxKwp, dD: kwh * day / 30, nD: kwh * (1 - day) / 30, opts: [], dropped: [], P };
+    const sell = !!i.sell && i.sell !== 'no', sellRate = sell ? (+i.sellRate > 0 ? +i.sellRate : P.sellRate) : 0;
+    const D = { T, Y, W, day, phase, kwh, bill, backupW, maxKwp, sell, sellRate, dD: kwh * day / 30, nD: kwh * (1 - day) / 30, opts: [], dropped: [], P };
     if (!(kwh > 0)) return Object.assign(D, { ok: false, why: 'กรอกค่าไฟหรือจำนวนหน่วยต่อเดือน' });
-    const brand = P.inverters1[i.brand] ? i.brand : P.brand;
-    D.brand = brand;
+    const known = Object.keys(P.inverters1);
+    let brands = (Array.isArray(i.brands) ? i.brands : i.brand ? [i.brand] : []).filter(b => known.includes(b));
+    if (!brands.length) brands = [P.brand];
+    brands = known.filter(b => brands.includes(b));
+    D.brands = brands; D.brand = brands.join(' / ');
     // ขนาดอินเวอร์เตอร์ที่เลือกได้ และจำนวนแผงสูงสุดที่อินเวอร์เตอร์ใหญ่สุดรับได้
-    const sizes = hyb => (phase === 1 ? P.inverters1[brand][hyb ? 'hybrid' : 'ongrid'] : STD_INV);
-    const panCapOf = hyb => (phase === 1 ? Math.floor(Math.max(...sizes(hyb)) * P.dcAcMax * 1000 / W + 1e-9) : Infinity);
-    const pickInv = (kwp, hyb) => {
-      const L = sizes(hyb);
-      // 1 เฟส: ใส่แผงเกินขนาดอินเวอร์เตอร์ได้ถึง dcAcMax เท่า · 3 เฟส: อินเวอร์เตอร์ ≥ 90% ของ kWp
-      const ok = phase === 1 ? L.find(s => kwp <= s * P.dcAcMax + 1e-9) : L.find(s => s >= kwp * 0.9);
+    const invTable = phase === 1 ? P.inverters1 : P.inverters3;
+    const sizes = (hyb, brand) => ((invTable[brand] || {})[hyb ? 'hybrid' : 'ongrid'] || STD_INV);
+    const panCapOf = (hyb, brand) => Math.floor(Math.max(...sizes(hyb, brand)) * P.dcAcMax * 1000 / W + 1e-9);
+    const pickInv = (kwp, hyb, brand) => {
+      const L = sizes(hyb, brand);
+      // เลือกรุ่นเล็กสุดที่รับแผงได้ (ใส่แผงเกินขนาดอินเวอร์เตอร์ได้ถึง dcAcMax เท่า)
+      const ok = L.find(s => kwp <= s * P.dcAcMax + 1e-9);
       return ok || L[L.length - 1];
     };
 
-    const build = (name, hyb, bi, forcePan) => {
+    // โปรไฟล์รายชั่วโมง: การใช้ไฟของบ้าน และการผลิตไฟ (แดด 06:00–18:00)
+    const dw = []; for (let h = 6; h < 18; h++) dw.push(1 + 0.3 * Math.sin((h - 6) / 12 * Math.PI));
+    const nh = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5], nw = nh.map(h => (h >= 18 && h < 23 ? 1.6 : 0.7));
+    const sdw = dw.reduce((a, b) => a + b, 0), snw = nw.reduce((a, b) => a + b, 0);
+    const loadH = Array.from({ length: 24 }, (_, h) => (h >= 6 && h < 18 ? D.dD * dw[h - 6] / sdw : D.nD * nw[nh.indexOf(h)] / snw));
+    const sol = Array.from({ length: 24 }, (_, h) => (h >= 6 && h <= 18 ? Math.max(0, Math.sin((h - 6) / 12 * Math.PI)) : 0)), ss = sol.reduce((a, b) => a + b, 0);
+
+    const build = (name, hyb, bi, forcePan, brand) => {
       const B = hyb ? P.batteries[bi] : null, bk = B ? B.kwh : 0, nb = B ? 1 : 0;
       const us = bk * P.battDod;
       const need = hyb ? (D.dD + Math.min(us, D.nD) / P.battEff) / Y : D.dD / Y;
       let pan = forcePan || Math.max(1, Math.ceil(need * 1000 / W - 1e-9));
-      const capped = pan > panCapOf(hyb);
-      pan = Math.min(pan, panCapOf(hyb));
+      const capped = pan > panCapOf(hyb, brand);
+      pan = Math.min(pan, panCapOf(hyb, brand));
       const kwp = pan * W / 1000;
-      const ik = pickInv(kwp, hyb);
-      const prod = kwp * Y, direct = Math.min(prod, D.dD);
-      const st = hyb ? Math.min((prod - direct) * P.battEff, us, D.nD) : 0;
-      const save = (direct + st) * 30 * T;
+      const ik = pickInv(kwp, hyb, brand);
+      const prod = kwp * Y;
+      // คิดรายชั่วโมง: ไฟที่ผลิตตรงกับช่วงที่บ้านใช้ = ใช้เองทันที ส่วนเกิน = ชาร์จแบต (ไฮบริด) หรือส่งออก
+      let direct = 0, surplus = 0;
+      sol.forEach((x, h) => { const v = prod * x / ss; direct += Math.min(v, loadH[h]); surplus += Math.max(0, v - loadH[h]); });
+      const st = hyb ? Math.min(surplus * P.battEff, us, D.dD + D.nD - direct) : 0;
+      const saveBill = (direct + st) * 30 * T;
+      // ไฟที่เหลือจากการใช้ในบ้านและชาร์จแบต ขายคืนการไฟฟ้า
+      const exportD = Math.max(0, surplus - (hyb ? st / P.battEff : 0));
+      const sellMo = sell ? exportD * 30 * sellRate : 0;
+      const save = saveBill + sellMo;
       const items = [
         { d: `แผงโซลาร์ N-type ${W}W Bi-Facial (Tier 1)`, q: pan, u: 'แผง', p: P.panelPrice },
-        { d: `อินเวอร์เตอร์ ${brand} ${hyb ? 'Hybrid' : 'On-Grid'} ${ik} kW ${phase} เฟส (อยู่ในบัญชีการไฟฟ้า)`, q: 1, u: 'เครื่อง', p: invPrice(ik, hyb, P) },
+        { d: `อินเวอร์เตอร์ ${brand} ${hyb ? 'Hybrid' : 'On-Grid'} ${ik} kW ${phase} เฟส (อยู่ในบัญชีการไฟฟ้า)`, q: 1, u: 'เครื่อง', p: invPrice(ik, hyb, P, brand, phase) },
         ...(B ? [{ d: `แบตเตอรี่ลิเธียม LFP ${bk} kWh`, q: 1, u: 'ชุด', p: B.price }] : []),
         { d: 'รางอะลูมิเนียมและอุปกรณ์ยึดหลังคา', q: pan, u: 'ชุด', p: P.mountPerPanel },
         { d: 'ตู้ DC/AC Protection (เบรกเกอร์ / Surge / ฟิวส์)', q: 1, u: 'ตู้', p: P.protection },
@@ -88,36 +125,42 @@
       for (let y = 0; y <= 25; y++) { cum.push(Math.round(c)); c += save * 12 * Math.pow(1 - P.degradation, y); }
       return {
         name, hyb, nb, need: +need.toFixed(2), batt: bk, pan, kwp: +kwp.toFixed(2), inv: ik, brand, capped, dcac: +(kwp / ik).toFixed(2),
-        prodMo: Math.round(prod * 30), prodYr: Math.round(prod * 365), save: Math.round(save), pct: Math.round(save / bill * 100),
+        prodMo: Math.round(prod * 30), prodYr: Math.round(prod * 365), save: Math.round(save), saveBill: Math.round(saveBill), sellMo: Math.round(sellMo), exportMo: Math.round(exportD * 30), pct: Math.round(saveBill / bill * 100),
         ex: Math.round(ex), cost: Math.round(cost), payback: save > 0 ? +(cost / (save * 12)).toFixed(1) : 0,
-        night: hyb && D.nD ? Math.round(st / D.nD * 100) : 0, y25: Math.round(cum[25]),
+        night: hyb && D.nD ? Math.min(100, Math.round(st / D.nD * 100)) : 0, y25: Math.round(cum[25]),
         backupH: hyb ? +(us / (backupW / 1000)).toFixed(1) : 0, cum, items
       };
     };
-    let all = OPT_DEFS.map(([n, h, b]) => build(n, h, b));
-    // ตัดทางเลือกที่ต้องใช้ขนาดเกินพื้นที่ติดตั้งได้
-    if (maxKwp) {
-      all.forEach(o => { if (o.kwp > maxKwp + 1e-9) D.dropped.push({ name: o.name, kwp: o.kwp, why: 'เกินพื้นที่ติดตั้ง' }); });
-      all = all.filter(o => o.kwp <= maxKwp + 1e-9);
-      if (!all.length) { // ไม่มีทางเลือกไหนพอดี: เสนอ On-Grid ขนาดเต็มพื้นที่
-        const pan = Math.max(1, Math.floor(maxKwp * 1000 / W + 1e-9));
-        all = [Object.assign(build('On-Grid', false, 0, pan), { sizedToRoof: true })];
+    const multi = brands.length > 1;
+    let all = [];
+    brands.forEach(brand => {
+      const label = n => (multi ? `${n} ${brand}` : n);
+      let list = OPT_DEFS.map(([n, h, b, t]) => Object.assign(build(label(n), h, b, null, brand), { base: n, key: t + '|' + brand }));
+      // ตัดทางเลือกที่ต้องใช้ขนาดเกินพื้นที่ติดตั้งได้
+      if (maxKwp) {
+        list.forEach(o => { if (o.kwp > maxKwp + 1e-9) D.dropped.push({ name: o.name, kwp: o.kwp, why: 'เกินพื้นที่ติดตั้ง' }); });
+        list = list.filter(o => o.kwp <= maxKwp + 1e-9);
+        if (!list.length) { // ไม่มีทางเลือกไหนพอดี: เสนอ On-Grid ขนาดเต็มพื้นที่
+          const pan = Math.max(1, Math.floor(maxKwp * 1000 / W + 1e-9));
+          list = [Object.assign(build(label('On-Grid'), false, 0, pan, brand), { base: 'On-Grid', key: 'ongrid|' + brand, sizedToRoof: true })];
+        }
       }
-    }
-    // ไม่เสนอทางเลือกที่ขนาดซ้ำกัน (เช่น ถูกจำกัดด้วยมิเตอร์ 1 เฟส)
-    const seen = new Set();
-    all = all.filter(o => { const k = o.hyb + '|' + o.pan + '|' + o.batt; if (seen.has(k)) return false; seen.add(k); return true; });
-    D.opts = all;
-    D.capped = all.filter(o => o.capped).map(o => ({ name: o.name, inv: o.inv, kwp: o.kwp }));
-    const recName = i.rec && all.find(o => o.name === i.rec) ? i.rec : all[0].name;
-    D.rec = all.find(o => o.name === recName);
-    // hourly load and production profiles (06:00–18:00 sun)
-    const dw = []; for (let h = 6; h < 18; h++) dw.push(1 + 0.3 * Math.sin((h - 6) / 12 * Math.PI));
-    const nh = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5], nw = nh.map(h => (h >= 18 && h < 23 ? 1.6 : 0.7));
-    const sdw = dw.reduce((a, b) => a + b, 0), snw = nw.reduce((a, b) => a + b, 0);
-    D.load = Array.from({ length: 24 }, (_, h) => +(h >= 6 && h < 18 ? D.dD * dw[h - 6] / sdw : D.nD * nw[nh.indexOf(h)] / snw).toFixed(2));
-    const sol = Array.from({ length: 24 }, (_, h) => (h >= 6 && h <= 18 ? Math.max(0, Math.sin((h - 6) / 12 * Math.PI)) : 0)), ss = sol.reduce((a, b) => a + b, 0);
-    D.opts.forEach(o => { o.prof = sol.map(s => +(o.prodMo / 30 * s / ss).toFixed(2)); });
+      // ไม่เสนอทางเลือกที่ขนาดซ้ำกัน (เช่น ถูกจำกัดด้วยขนาดอินเวอร์เตอร์)
+      const seen = new Set();
+      all.push(...list.filter(o => { const k = o.hyb + '|' + o.pan + '|' + o.batt; if (seen.has(k)) return false; seen.add(k); return true; }));
+    });
+    // เรียงตามชนิดระบบ แล้วตามยี่ห้อ เพื่อเทียบราคาง่าย
+    const TORD = { ongrid: 0, hybrid: 1, hybrid2: 2 };
+    all.sort((a, b) => TORD[a.key.split('|')[0]] - TORD[b.key.split('|')[0]] || brands.indexOf(a.brand) - brands.indexOf(b.brand));
+    const off = new Set(Array.isArray(i.off) ? i.off : []);
+    all.forEach(o => { o.on = !off.has(o.key); });
+    D.all = all;
+    D.opts = all.filter(o => o.on);
+    D.capped = all.filter(o => o.capped).map(o => ({ name: o.name, brand: o.brand, inv: o.inv, kwp: o.kwp }));
+    if (!D.opts.length) { D.ok = false; D.why = 'เลือก Option อย่างน้อย 1 รายการเพื่อใส่ในไฟล์ Proposal'; D.load = []; return D; }
+    D.rec = D.opts[0];
+    D.load = loadH.map(v => +v.toFixed(2));
+    D.all.forEach(o => { o.prof = sol.map(s => +(o.prodMo / 30 * s / ss).toFixed(2)); });
     D.ok = true;
     return D;
   }
@@ -138,6 +181,9 @@
     const I = assets.icons, logo = assets.logo;
     const OPTS = D.opts;
     const HYB = OPTS.find(o => o.hyb);
+    // ทางเลือกที่ขนาดแผงและแบตเหมือนกัน (ต่างแค่ยี่ห้อ) แสดงครั้งเดียวในกราฟและหน้าพื้นที่
+    const SIZES = []; OPTS.forEach(o => { if (!SIZES.find(x => x.pan === o.pan && x.batt === o.batt && x.hyb === o.hyb)) SIZES.push(Object.assign({}, o, { name: o.base || o.name })); });
+    const PANS = []; OPTS.forEach(o => { if (!PANS.find(x => x.pan === o.pan)) PANS.push(o); });
     const customer = meta.customer || 'ลูกค้า';
     const pres = new PptxGenJS();
     pres.layout = 'LAYOUT_16x9';
@@ -197,7 +243,7 @@
       s.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color: fill }, line: { type: 'none' }, objectName: name + ' circle' });
       s.addImage({ data, x: x + d * 0.22, y: y + d * 0.22, w: d * 0.56, h: d * 0.56, objectName: name + ' icon' });
     };
-    const OCOL = [HEX.orange, HEX.blue, HEX.green];
+    const OCOL = [HEX.orange, HEX.blue, HEX.green, 'B07A00', HEX.navy, HEX.red];
     const chartText = { catAxisLabelColor: HEX.grey, valAxisLabelColor: HEX.grey, catAxisLabelFontSize: 9, valAxisLabelFontSize: 9, catAxisLabelFontFace: '+mn-lt', valAxisLabelFontFace: '+mn-lt', valGridLine: { color: 'E6EBF4', size: 0.75 }, catGridLine: { style: 'none' }, showLegend: true, legendPos: 'b', legendFontSize: 10, legendFontFace: '+mn-lt', legendColor: HEX.ink2 };
     const ct = o => Object.assign({}, chartText, { valGridLine: { color: 'E6EBF4', size: 0.75 }, catGridLine: { style: 'none' } }, o);
 
@@ -211,12 +257,13 @@
         ...(meta.addr ? [{ text: meta.addr, options: { breakLine: true } }] : []),
         { text: 'ข้อเสนอระบบผลิตไฟฟ้าพลังงานแสงอาทิตย์  ·  ' + meta.date }
       ], { placeholder: 'body' });
-      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 7.05, y: 1.85, w: 2.45, h: 1.0 + 0.42 * (OPTS.length + 1), rectRadius: 0.1, fill: { color: C.accent1 }, line: { type: 'none' }, objectName: 'Options panel' });
+      const lh = OPTS.length > 3 ? 0.3 : 0.42;
+      s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 7.05, y: 1.85, w: 2.45, h: 1.0 + lh * (OPTS.length + 1), rectRadius: 0.1, fill: { color: C.accent1 }, line: { type: 'none' }, objectName: 'Options panel' });
       s.addImage({ data: I.panelW, x: 7.3, y: 2.05, w: 0.5, h: 0.5, objectName: 'Panel icon' });
       s.addText([
         { text: 'ทางเลือกในข้อเสนอนี้', options: { fontSize: 12, color: 'FFFFFF', breakLine: true, paraSpaceAfter: 4 } },
-        ...OPTS.map((o, k) => ({ text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: OPTS.length > 2 ? 14 : 16, bold: true, color: 'FFFFFF', breakLine: k < OPTS.length - 1 } }))
-      ], { x: 7.3, y: 2.65, w: 2.05, h: 1.8, valign: 'top', margin: 0, isTextBox: true, objectName: 'Options text' });
+        ...OPTS.map((o, k) => ({ text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: OPTS.length > 3 ? 11 : OPTS.length > 2 ? 14 : 16, bold: true, color: 'FFFFFF', breakLine: k < OPTS.length - 1 } }))
+      ], { x: 7.3, y: 2.65, w: 2.1, h: 0.2 + lh * (OPTS.length + 1), valign: 'top', margin: 0, isTextBox: true, objectName: 'Options text' });
     }
 
     // ---------- current usage ----------
@@ -252,8 +299,8 @@
       const s = pres.addSlide({ masterName: 'ST Content', sectionTitle: 'การใช้ไฟของลูกค้า' });
       s.addText('การใช้ไฟเทียบการผลิตไฟต่อวัน', { placeholder: 'title' });
       const hours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0') + ':00');
-      s.addChart(pres.charts.LINE, [{ name: 'การใช้ไฟของบ้าน', labels: hours, values: D.load }, ...OPTS.map(o => ({ name: `ผลิตไฟ ${o.name} ${fk(o.kwp)} kWp`, labels: hours, values: o.prof }))], ct({
-        x: 0.4, y: 1.0, w: 9.2, h: 4.1, chartColors: [HEX.navy, ...OCOL.slice(0, OPTS.length)], lineSize: 2.5, lineDataSymbol: 'none', catAxisLabelFrequency: 2,
+      s.addChart(pres.charts.LINE, [{ name: 'การใช้ไฟของบ้าน', labels: hours, values: D.load }, ...PANS.map(o => ({ name: `ผลิตไฟ ${fk(o.kwp)} kWp`, labels: hours, values: o.prof }))], ct({
+        x: 0.4, y: 1.0, w: 9.2, h: 4.1, chartColors: [HEX.navy, ...OCOL.slice(0, PANS.length)], lineSize: 2.5, lineDataSymbol: 'none', catAxisLabelFrequency: 2,
         showValAxisTitle: true, valAxisTitle: 'kW', valAxisTitleFontSize: 10, valAxisTitleColor: HEX.grey, valAxisTitleFontFace: '+mn-lt',
         showTitle: true, title: 'การใช้ไฟและการผลิตไฟเฉลี่ยรายชั่วโมง (kW)', titleFontSize: 12, titleColor: HEX.ink, titleFontFace: '+mn-lt', objectName: 'Daily load vs solar'
       }));
@@ -344,8 +391,8 @@
         { text: '10 kWp คือกำลังของแผงในห้องทดสอบ ใช้งานจริงกำลังลดลงเพราะ', options: { fontSize: 10.5, color: C.text1, breakLine: true, paraSpaceAfter: 4 } },
         b('ความร้อนของแผง'), b('มุมและทิศของหลังคา'), b('ฝุ่น เมฆ และฤดูกาล'), last
       ], { x: 6.75, y: 1.12, w: 2.6, h: 2.0, valign: 'top', margin: 0, isTextBox: true, objectName: 'Why peak text' });
-      OPTS.forEach((o, i) => {
-        s.addText([{ text: `ระบบ ${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: 10, color: C.accent5, breakLine: true } }, { text: `พีคเฉลี่ย ~${fmt1(o.kwp * D.P.peakFactor)} kW`, options: { fontSize: 14, bold: true, color: OCOL[i] } }],
+      PANS.slice(0, 3).forEach((o, i) => {
+        s.addText([{ text: `ระบบ ${fk(o.kwp)} kWp`, options: { fontSize: 10, color: C.accent5, breakLine: true } }, { text: `พีคเฉลี่ย ~${fmt1(o.kwp * D.P.peakFactor)} kW`, options: { fontSize: 14, bold: true, color: OCOL[i] } }],
           { x: 6.75, y: 3.2 + i * 0.6, w: 2.6, h: 0.55, margin: 0, isTextBox: true });
       });
     }
@@ -363,7 +410,7 @@
         { text: 'ประเมินจากการสำรวจหน้างานและภาพถ่ายดาวเทียม', options: { fontSize: 10, color: C.accent5 } }
       ], { x: 5.3, y: 1.12, w: 4.05, h: 1.42, valign: 'middle', margin: 0, isTextBox: true, objectName: 'Max capacity text' });
       s.addText('ทางเลือกที่ติดตั้งได้', { x: 5.1, y: 2.85, w: 4.4, h: 0.35, fontSize: 14, bold: true, color: C.text2, margin: 0, isTextBox: true });
-      OPTS.forEach((o, i) => {
+      SIZES.slice(0, 3).forEach((o, i) => {
         const y = 3.3 + i * 0.55;
         circleIcon(s, I.check, 5.1, y + 0.04, 0.36, HEX.green, o.name + ' fits');
         s.addText([{ text: `${o.name} ${fk(o.kwp)} kWp`, options: { bold: true, color: C.text1 } }, { text: `   ${o.pan} แผง${o.hyb ? ` · แบต ${fmt1(o.batt)} kWh` : ''}`, options: { color: C.accent5, fontSize: 11 } }],
@@ -376,21 +423,24 @@
     {
       const s = pres.addSlide({ masterName: 'ST Content', sectionTitle: 'ข้อเสนอ' });
       s.addText('เปรียบเทียบทางเลือก', { placeholder: 'title' });
-      const head = (t, sub, col) => ({ text: [{ text: t, options: { bold: true, breakLine: true } }, { text: sub, options: { fontSize: 9 } }], options: { color: 'FFFFFF', fill: { color: col }, align: 'center', valign: 'middle' } });
+      const many = OPTS.length > 3;
+      const head = (t, sub, col) => ({ text: [{ text: t, options: { bold: true, breakLine: true } }, { text: sub, options: { fontSize: many ? 8 : 9 } }], options: { color: 'FFFFFF', fill: { color: col }, align: 'center', valign: 'middle' } });
       const row = (label, f, bold) => [{ text: label, options: { bold: true, color: HEX.ink2 } }, ...OPTS.map(o => ({ text: f(o), options: { align: 'center', bold: !!bold, fill: { color: 'FFFFFF' } } }))];
       s.addTable([
         [{ text: '', options: { fill: { color: 'FFFFFF' } } }, ...OPTS.map(o => head(o.name, o.hyb ? `แบต ${fmt1(o.batt)} kWh` : 'ไม่มีแบตเตอรี่', o.hyb ? HEX.navy : HEX.orange))],
-        row('อินเวอร์เตอร์', o => `${D.brand} ${o.hyb ? 'Hybrid' : 'On-Grid'} ${o.inv} kW ${D.phase} เฟส`),
+        row('อินเวอร์เตอร์', o => `${o.brand} ${o.hyb ? 'Hybrid' : 'On-Grid'} ${o.inv} kW${many || D.sell ? '' : ` ${D.phase} เฟส`}`),
         row(`แผงโซลาร์ ${D.W}W`, o => `${o.pan} แผง · ${fk(o.kwp)} kWp`),
         row('แบตเตอรี่', o => (o.hyb ? `${fmt1(o.batt)} kWh` : '–')),
         row('ผลิตไฟ/เดือน', o => `${fmt(o.prodMo)} หน่วย`),
-        row('ใช้ไฟได้ตอนไฟดับ', o => (o.hyb ? `เพิ่ม Backup ได้ ~${fmt1(o.backupH)} ชม.*` : 'ไม่ได้')),
-        row('ประหยัด/เดือน', o => `฿${fmt(o.save)} (${o.pct}%)`, true),
+        row('ใช้ไฟได้ตอนไฟดับ', o => (o.hyb ? (many ? `Backup ~${fmt1(o.backupH)} ชม.*` : `เพิ่ม Backup ได้ ~${fmt1(o.backupH)} ชม.*`) : 'ไม่ได้')),
+        ...(D.sell ? [row('ประหยัดค่าไฟ/เดือน', o => `฿${fmt(o.saveBill)} (${o.pct}%)`),
+          row('ขายไฟคืน/เดือน', o => `฿${fmt(o.sellMo)} (${fmt(o.exportMo)} หน่วย)`),
+          row('รวมประโยชน์/เดือน', o => `฿${fmt(o.save)}`, true)] : [row('ประหยัด/เดือน', o => `฿${fmt(o.save)} (${o.pct}%)`, true)]),
         row('ราคารวม VAT', o => `฿${fmt(o.cost)}`, true),
         row('คืนทุน', o => `${fmt1(o.payback)} ปี`, true)
-      ], { x: 0.5, y: 1.0, w: 9.0, colW: [2.1, ...OPTS.map(() => 6.9 / OPTS.length)], fontSize: 12, color: HEX.ink, border: { type: 'solid', pt: 0.5, color: 'D9E1EF' }, rowH: [0.5, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34], objectName: 'Options comparison table' });
-      s.addText(`* วงจรสำรอง ${fmt(D.backupW)} W (ตู้เย็น ไฟ Wi-Fi ปั๊มน้ำ) · ทุกระบบหยุดทำงานเมื่อไฟดับ ต้องทำระบบ Backup เพิ่ม (ยังไม่รวมในราคา)`,
-        { x: 0.5, y: 4.55, w: 9.0, h: 0.5, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true });
+      ], { x: 0.5, y: 1.0, w: 9.0, colW: [many ? 1.5 : 2.1, ...OPTS.map(() => (many ? 7.5 : 6.9) / OPTS.length)], fontSize: many ? 9.5 : D.sell ? 11 : 12, color: HEX.ink, border: { type: 'solid', pt: 0.5, color: 'D9E1EF' }, rowH: [0.5, ...Array(D.sell ? 10 : 8).fill(D.sell ? 0.29 : 0.34)], objectName: 'Options comparison table' });
+      s.addText(`* วงจรสำรอง ${fmt(D.backupW)} W (ตู้เย็น ไฟ Wi-Fi ปั๊มน้ำ) · ทุกระบบหยุดทำงานเมื่อไฟดับ ต้องทำระบบ Backup เพิ่ม (ยังไม่รวมในราคา)${D.sell ? ` · ขายไฟคืน ${D.sellRate} บาท/หน่วย` : ''}`,
+        { x: 0.5, y: D.sell ? 4.75 : 4.55, w: 9.0, h: 0.5, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true });
       s.addNotes('ตัวเลขคำนวณจากโปรแกรม SOLARTOUCH ราคาเป็นราคามาตรฐาน แก้ได้ก่อนส่งลูกค้า');
     }
 
@@ -405,19 +455,23 @@
         showValAxisTitle: true, valAxisTitle: 'เงินสะสม (พันบาท)', valAxisTitleFontSize: 9, valAxisTitleColor: HEX.grey, valAxisTitleFontFace: '+mn-lt',
         showTitle: true, title: 'เงินที่ประหยัดสะสม หักค่าระบบแล้ว', titleFontSize: 12, titleColor: HEX.ink, titleFontFace: '+mn-lt', objectName: 'Cumulative savings chart'
       }));
-      const SOFT = [HEX.orangeSoft, HEX.blueSoft, HEX.greenSoft];
-      const n = Math.min(OPTS.length, 3), ch = n === 3 ? 1.25 : 1.8;
-      OPTS.slice(0, 3).forEach((o, i) => {
-        const y = 1.05 + i * (ch + 0.15);
+      const SOFT = [HEX.orangeSoft, HEX.blueSoft, HEX.greenSoft, 'FFF4D6', 'E3E7F0', HEX.redSoft];
+      const n = OPTS.length, compact = n > 3, ch = compact ? (4.0 - 0.1 * (n - 1)) / n : n === 3 ? 1.25 : 1.8;
+      OPTS.forEach((o, i) => {
+        const y = 1.05 + i * (ch + (compact ? 0.1 : 0.15));
         card(s, 6.95, y, 2.55, ch, SOFT[i], o.name + ' value card');
-        s.addText([
+        s.addText(compact ? [
+          { text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: 9.5, bold: true, color: OCOL[i], breakLine: true } },
+          { text: `คืนทุน ${fmt1(o.payback)} ปี`, options: { fontSize: 12, bold: true, color: C.text1 } },
+          { text: `  ·  25 ปี ฿${fmt(o.y25)}`, options: { fontSize: 9, color: C.accent5 } }
+        ] : [
           { text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: 12, bold: true, color: OCOL[i], breakLine: true } },
           { text: `คืนทุน ${fmt1(o.payback)} ปี`, options: { fontSize: n === 3 ? 16 : 20, bold: true, color: C.text1, breakLine: true } },
           { text: 'ประหยัดสุทธิ 25 ปี  ', options: { fontSize: 10, color: C.accent5, breakLine: n !== 3 } },
           { text: `฿${fmt(o.y25)}`, options: { fontSize: n === 3 ? 12 : 16, bold: true, color: C.text1 } }
-        ], { x: 7.15, y: y + 0.1, w: 2.2, h: ch - 0.2, valign: 'top', margin: 0, isTextBox: true });
+        ], { x: 7.1, y: y + (compact ? 0.05 : 0.1), w: 2.3, h: ch - (compact ? 0.1 : 0.2), valign: compact ? 'middle' : 'top', margin: 0, isTextBox: true });
       });
-      s.addNotes(`ประมาณการจากค่าไฟ ${D.T} บาท/หน่วย ผลิตไฟ ${D.Y} หน่วย/kWp/วัน แผงเสื่อม ${D.P.degradation * 100}%/ปี ไม่รวมการขายไฟคืน`);
+      s.addNotes(`ประมาณการจากค่าไฟ ${D.T} บาท/หน่วย ผลิตไฟ ${D.Y} หน่วย/kWp/วัน แผงเสื่อม ${D.P.degradation * 100}%/ปี ${D.sell ? `รวมรายได้ขายไฟคืน ${D.sellRate} บาท/หน่วย` : 'ไม่รวมการขายไฟคืน'}`);
     }
 
     // ---------- equipment & warranty ----------
@@ -500,7 +554,7 @@
           { x: x + 0.25, y: 1.25, w: tw - 0.4, h: 1.15, valign: 'middle', margin: 0, isTextBox: true });
       });
       s.addText('ราคารวมการออกแบบ วิศวกรรับรอง และดำเนินการขออนุญาตขนานไฟกับการไฟฟ้า · ข้อเสนอนี้มีอายุ 30 วัน', { x: 0.5, y: 2.7, w: 9, h: 0.4, fontSize: 12, color: 'BFCDEE', margin: 0, isTextBox: true });
-      s.addText('เลือกทางเลือก   ' + OPTS.map(o => `☐ ${o.name} ${fk(o.kwp)} kWp`).join('   '), { x: 0.5, y: 3.25, w: 9, h: 0.4, fontSize: 14, bold: true, color: 'FFFFFF', margin: 0, isTextBox: true });
+      s.addText('เลือกทางเลือก   ' + OPTS.map(o => `☐ ${o.name} ${fk(o.kwp)} kWp`).join('   '), { x: 0.5, y: 3.15, w: 9, h: OPTS.length > 3 ? 0.75 : 0.4, fontSize: OPTS.length > 3 ? 12 : 14, valign: 'top', bold: true, color: 'FFFFFF', margin: 0, isTextBox: true });
       const pr = meta.proposer || {};
       const prLines = [pr.name, [pr.phone || co.phone, pr.email].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
       [['ผู้เสนอ · SOLAR TOUCH', prLines || co.phone], ['ลูกค้าผู้อนุมัติ', customer]].forEach(([t, d], i) => {

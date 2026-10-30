@@ -493,3 +493,11 @@ tr.g-normal>td:first-child{box-shadow:inset 5px 0 0 #11905A}
 .grpseg input:checked+span.g-special{background:#F0661A;color:#fff}
 .grpseg input:checked+span.g-normal{background:#11905A;color:#fff}
 .card .r1 .code{white-space:nowrap}.card .r1 .gtag{flex:none}
+
+/* Proposal: ติ๊กยี่ห้อ / เลือก Option */
+.chkrow{display:flex;gap:8px;flex-wrap:wrap}
+.chkrow .chk{display:flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-weight:600;cursor:pointer}
+.chkrow .chk:has(input:checked){border-color:var(--orange);background:var(--orange-soft,#FFF1E8)}
+.chk input{width:17px;height:17px;accent-color:var(--orange);margin:0}
+tr.opt-off td{opacity:.45}
+tr.opt-off td:first-child{opacity:1}

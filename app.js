@@ -422,6 +422,7 @@ const PERMS=[
   ['jobs.edit.own','แก้ไขเฉพาะงานที่ตัวเองเป็นผู้ดูแลโครงการ'],
   ['jobs.delete','ลบงาน'],
   ['quote.view','ดูใบเสนอราคาและมูลค่างาน'],
+  ['proposal.make','สร้าง Proposal ของงานที่ตัวเองดูแล'],
   ['finance.view','ดูสถานะการจ่ายเงิน'],
   ['finance.edit','บันทึกรับชำระเงินจากลูกค้า'],
   ['bonus.view.all','ดูโบนัสของทุกคน'],
@@ -430,8 +431,8 @@ const PERMS=[
   ['settings.edit','แก้อัตราโบนัสและงวดชำระเงิน']
 ];
 const DEFAULT_PERMS={
-  manager:{'jobs.edit':false,'jobs.edit.own':true,'jobs.delete':true,'quote.view':true,'finance.view':true,'finance.edit':true,'bonus.view.all':true,'bonus.view.own':true,'bonus.pay':false,'settings.edit':false},
-  staff:{'jobs.edit':false,'jobs.edit.own':true,'jobs.delete':false,'quote.view':false,'finance.view':false,'finance.edit':false,'bonus.view.all':false,'bonus.view.own':true,'bonus.pay':false,'settings.edit':false}
+  manager:{'jobs.edit':false,'jobs.edit.own':true,'jobs.delete':true,'quote.view':true,'proposal.make':true,'finance.view':true,'finance.edit':true,'bonus.view.all':true,'bonus.view.own':true,'bonus.pay':false,'settings.edit':false},
+  staff:{'jobs.edit':false,'jobs.edit.own':true,'jobs.delete':false,'quote.view':false,'proposal.make':true,'finance.view':false,'finance.edit':false,'bonus.view.all':false,'bonus.view.own':true,'bonus.pay':false,'settings.edit':false}
 };
 const DEFAULT_APP={
   installments:[{k:'dep',label:'มัดจำเมื่ออนุมัติ',pct:50,stage:'deal'},{k:'inst',label:'งวดติดตั้งแล้วเสร็จ',pct:40,stage:'install'},{k:'final',label:'งวดสุดท้าย COD',pct:10,stage:'done'}],
@@ -447,6 +448,7 @@ function applyPerms(){S.canWrite=S.baseWrite!==false&&(can('jobs.edit')||can('jo
 // may this viewer change this particular job?
 function canEditJob(j){return S.baseWrite!==false&&!!j&&(can('jobs.edit')||(can('jobs.edit.own')&&!!j.pm&&j.pm===S.me))}
 const JW=()=>canEditJob(S.jobs.get(S.open));
+const canProposal=j=>can('quote.view')||(can('proposal.make')&&canEditJob(j));
 function noAccess(what){return `<div class="empty"><h2>ไม่มีสิทธิ์เข้าถึง${esc(what||'')}</h2><p>ขอให้ผู้ดูแลระบบเปิดสิทธิ์ในเมนู “สิทธิ์การใช้งาน”</p></div>`}
 // write a doc whether or not it exists yet (artifact update() needs an existing doc)
 function upsert(col,id,data,cur){return cur?BK.patch(col,id,data):BK.put(col,id,deepMerge({},data))}
@@ -755,9 +757,9 @@ function renderDrawer(force){
     <div class="stage-row"><span class="now">ขั้นที่ ${i+1}/${STAGES.length} · ${esc(STAGES[i].t)}<small>อยู่ในขั้นนี้ ${days(j.stageAt)} วัน · เริ่ม ${dTH(j.stageAt)}</small></span>
       ${i>0?`<button class="btn sm" data-stage="${STAGES[i-1].k}" ${dis}>← ย้อน</button>`:''}
       ${i<STAGES.length-1?`<button class="btn sm pri" data-stage="${STAGES[i+1].k}" ${dis}>ขั้นถัดไป: ${esc(STAGES[i+1].s)} →</button>`:''}</div>
-    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา'],['proposal','Proposal']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],...(can('bonus.view.all')||JW()?[['crew',`ทีมช่าง${(j.crew||[]).filter(c=>c&&c.name).length?` (${(j.crew||[]).filter(c=>c&&c.name).length})`:''}`]]:[]),['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
+    <div class="tabs" role="tablist">${[['info','ข้อมูล'],...(can('quote.view')?[['quote','ใบเสนอราคา']]:[]),...(canProposal(j)?[['proposal','Proposal']]:[]),...(can('finance.view')?[['pay','การเงิน']]:[]),['permit','ขออนุญาต'],['appts',`นัดหมาย${(j.appts||[]).length?` (${j.appts.length})`:''}`],...(can('bonus.view.all')||JW()?[['crew',`ทีมช่าง${(j.crew||[]).filter(c=>c&&c.name).length?` (${(j.crew||[]).filter(c=>c&&c.name).length})`:''}`]]:[]),['photos',`รูปถ่าย ${ph.d}/${ph.n}`],['log','ประวัติ']].map(([k,t])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${t}</button>`).join('')}</div>
   </div>
-  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='proposal'&&can('quote.view')?proposalTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='crew'?crewTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
+  <div class="d-body">${S.tab==='info'?infoTab(j,dis):S.tab==='pay'?payTab(j):S.tab==='quote'&&can('quote.view')?quoteTab(j,dis):S.tab==='proposal'&&canProposal(j)?proposalTab(j,dis):S.tab==='permit'?permitTab(j,dis):S.tab==='crew'?crewTab(j,dis):S.tab==='appts'?apptTab(j,dis):S.tab==='photos'?photoTab(j,dis):logTab(j)}</div>`;
   el.querySelector('.d-body').scrollTop=bodyScroll;
   const at=el.querySelector('.tabs [aria-selected="true"]');if(at){const tb=at.parentElement;if(at.offsetLeft+at.offsetWidth>tb.scrollLeft+tb.clientWidth||at.offsetLeft<tb.scrollLeft)tb.scrollLeft=at.offsetLeft-24}
   if(S.tab==='info')initMini(j);
@@ -838,7 +840,7 @@ let pptxLoad=null;
 function loadPptx(){if(window.PptxGenJS&&window.JSZip)return Promise.resolve();
   return pptxLoad||(pptxLoad=new Promise((ok,no)=>{const sc=document.createElement('script');sc.src=PPTX_SRC;sc.onload=()=>window.PptxGenJS?ok():no(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxLoad=null;no(new Error('load failed'))};document.head.appendChild(sc)}))}
 function ppIn(j){const p=j.proposal||{};const d=(window.ST_PROPOSAL&&ST_PROPOSAL.DEFAULTS)||{};
-  return{phase:j.phase||'1',mode:p.mode||'bill',bill:p.bill??'',units:p.units??'',tariff:p.tariff??d.tariff,dayPct:p.dayPct??d.dayPct,maxKwp:p.maxKwp??'',brand:p.brand||d.brand||'GoodWe',backupW:p.backupW??d.backupW,yield:p.yield??d.yield,rec:p.rec||''}}
+  return{phase:j.phase||'1',mode:p.mode||'bill',bill:p.bill??'',units:p.units??'',tariff:p.tariff??d.tariff,dayPct:p.dayPct??d.dayPct,maxKwp:p.maxKwp??'',sell:p.sell==='yes'?'yes':'no',sellRate:p.sellRate??d.sellRate,brands:Array.isArray(p.brands)&&p.brands.length?p.brands:[p.brand||d.brand||'GoodWe'],off:Array.isArray(p.off)?p.off:[],backupW:p.backupW??d.backupW,yield:p.yield??d.yield,rec:p.rec||''}}
 function proposalTab(j,dis){
   if(!window.ST_PROPOSAL)return `<div class="banner soft"><span>โหลดส่วน Proposal ไม่สำเร็จ ลองรีเฟรชหน้าเว็บ</span></div>`;
   const p=ppIn(j);const D=ST_PROPOSAL.calc(p);
@@ -846,27 +848,31 @@ function proposalTab(j,dis){
   const fld=(id,label,inner,note)=>`<div class="fld"><label for="${id}">${label}</label>${inner}${note?`<span class="note">${note}</span>`:''}</div>`;
   const form=`<div class="form">
     ${fld('pp-phase','มิเตอร์',`<select class="in" id="pp-phase" data-f="phase" ${dis}>${opt([['1','1 เฟส'],['3','3 เฟส']],p.phase)}</select>`)}
-    ${fld('pp-brand','ยี่ห้ออินเวอร์เตอร์',`<select class="in" id="pp-brand" data-pp="brand" ${dis}>${opt(Object.keys(ST_PROPOSAL.DEFAULTS.inverters1).map(b=>[b,b]),p.brand)}</select>`,p.phase==='3'?'':`1 เฟส: ${['ongrid','hybrid'].map(t=>`${t==='ongrid'?'On-Grid':'Hybrid'} ${ST_PROPOSAL.DEFAULTS.inverters1[p.brand][t].join(', ')} kW`).join(' · ')}`)}
+    ${fld('pp-brand','ยี่ห้ออินเวอร์เตอร์ (ติ๊กได้หลายยี่ห้อเพื่อเทียบราคา)',`<div class="chkrow">${Object.keys(ST_PROPOSAL.DEFAULTS.inverters1).map(b=>`<label class="chk"><input type="checkbox" id="pp-brand-${b}" data-ppbrand="${b}" ${p.brands.includes(b)?'checked':''} ${dis}><span>${b}</span></label>`).join('')}</div>`,p.brands.map(b=>{const T=ST_PROPOSAL.DEFAULTS[p.phase==='3'?'inverters3':'inverters1'][b];return `${b} ${p.phase==='3'?3:1} เฟส: ${['ongrid','hybrid'].map(t=>`${t==='ongrid'?'On-Grid':'Hybrid'} ${T[t].join(', ')} kW`).join(' · ')}`}).join('<br>'))}
     ${fld('pp-mode','คิดจาก',`<select class="in" id="pp-mode" data-pp="mode" ${dis}>${opt([['bill','ค่าไฟต่อเดือน (บาท)'],['units','จำนวนหน่วยต่อเดือน']],p.mode)}</select>`)}
     ${p.mode==='units'?fld('pp-units','ใช้ไฟต่อเดือน (หน่วย)',num('units','1','เช่น 1,300')):fld('pp-bill','ค่าไฟต่อเดือน (บาท)',num('bill','1','เช่น 6,000'))}
     ${fld('pp-tariff','ค่าไฟเฉลี่ย (บาท/หน่วย)',num('tariff','0.01'))}
     ${fld('pp-dayPct','ใช้ไฟกลางวัน (%)',num('dayPct','1'),`กลางคืน ${Math.max(0,100-(+p.dayPct||0))}%`)}
     ${fld('pp-maxKwp','พื้นที่ติดตั้งได้ประมาณ (kWp)',num('maxKwp','0.01','จากการสำรวจหน้างาน'),'Option ที่ต้องใช้ขนาดเกินนี้จะถูกตัดออก')}
+    ${fld('pp-sell','ขายไฟคืนการไฟฟ้า',`<select class="in" id="pp-sell" data-pp="sell" ${dis}>${opt([['no','ไม่ขายไฟ'],['yes','ขายไฟคืน']],p.sell)}</select>`)}
+    ${p.sell==='yes'?fld('pp-sellRate','ราคารับซื้อไฟ (บาท/หน่วย)',num('sellRate','0.01'),'ไฟส่วนที่ใช้ไม่หมดขายคืนการไฟฟ้า'):''}
     ${fld('pp-backupW','โหลดในตู้ Backup (W)',num('backupW','10'),'ใช้คำนวณชั่วโมงไฟสำรองตอนไฟดับ')}
     ${fld('pp-yield','ผลิตไฟ (หน่วย/kWp/วัน)',num('yield','0.1'))}
   </div>`;
-  if(!D.ok)return form+`<div class="banner soft"><span>${esc(D.why)} เพื่อคำนวณ Option</span></div>`;
+  if(!D.ok&&!(D.all&&D.all.length))return form+`<div class="banner soft"><span>${esc(D.why)} เพื่อคำนวณ Option</span></div>`;
   const notes=[];
   if(!D.maxKwp)notes.push('ยังไม่ได้กรอกพื้นที่ติดตั้ง ระบบจะเสนอทุก Option');
   if(D.dropped.length&&!D.opts[0].sizedToRoof)notes.push('ตัดออกเพราะเกินพื้นที่: '+D.dropped.map(x=>`${x.name} ${fk2(x.kwp)} kWp`).join(', '));
   if(D.opts[0].sizedToRoof)notes.push(`ทุก Option เกินพื้นที่ จึงเสนอ On-Grid ขนาดเต็มพื้นที่ ${fk2(D.opts[0].kwp)} kWp`);
-  D.capped.forEach(c=>notes.push(`${c.name}: ${D.brand} มีอินเวอร์เตอร์ 1 เฟสใหญ่สุด ${c.inv} kW ใส่แผงได้ไม่เกิน ${fk2(c.kwp)} kWp (${ST_PROPOSAL.DEFAULTS.dcAcMax} เท่า)`));
-  const rows=D.opts.map((o,k)=>`<tr><td><b>${esc(o.name)}</b></td><td class="num">${fk2(o.kwp)} kWp<br><small class="muted">${o.pan} แผง</small></td><td class="num">${o.inv} kW${o.dcac>1?`<br><small class="muted">แผง ${o.dcac} เท่า</small>`:''}</td><td class="num">${o.hyb?fmt1(o.batt)+' kWh':'–'}</td><td class="r num">฿${fmt(o.save)}<br><small class="muted">${o.pct}%</small></td><td class="r num">฿${fmt(o.cost)}</td><td class="r num">${o.payback} ปี</td><td>${JW()&&!dis?`<button class="btn sm" data-useopt="${k}">ใช้ในใบเสนอราคา</button>`:''}</td></tr>`).join('');
+  D.capped.forEach(c=>notes.push(`${c.name}: ${c.brand} มีอินเวอร์เตอร์ ${D.phase} เฟสใหญ่สุด ${c.inv} kW ใส่แผงได้ไม่เกิน ${fk2(c.kwp)} kWp (${ST_PROPOSAL.DEFAULTS.dcAcMax} เท่า)`));
+  const canQ=can('quote.view');
+  const rows=D.all.map(o=>`<tr class="${o.on?'':'opt-off'}"><td><label class="chk" title="ใส่ Option นี้ในไฟล์ PowerPoint"><input type="checkbox" data-ppoff="${esc(o.key)}" ${o.on?'checked':''} ${dis} aria-label="เสนอ ${esc(o.name)} ในไฟล์"></label></td><td><b>${esc(o.name)}</b></td><td class="num">${fk2(o.kwp)} kWp<br><small class="muted">${o.pan} แผง</small></td><td class="num">${o.inv} kW${o.dcac>1?`<br><small class="muted">แผง ${o.dcac} เท่า</small>`:''}</td><td class="num">${o.hyb?fmt1(o.batt)+' kWh':'–'}</td><td class="r num">฿${fmt(o.save)}<br><small class="muted">${o.sellMo?`ขายไฟ ฿${fmt(o.sellMo)}`:o.pct+'%'}</small></td><td class="r num">฿${fmt(o.cost)}</td><td class="r num">${o.payback} ปี</td><td>${canQ&&JW()&&!dis?`<button class="btn sm" data-useopt="${esc(o.key)}">ใช้ในใบเสนอราคา</button>`:''}</td></tr>`).join('');
   return `${form}
   <div class="stage-row"><span class="now">ใช้ไฟ ${fmt(D.kwh)} หน่วย/เดือน${p.mode==='units'?` · ค่าไฟราว ฿${fmt(D.bill)}`:''}<small>กลางวัน ${fmt1(D.dD)} หน่วย/วัน · กลางคืน ${fmt1(D.nD)} หน่วย/คืน</small></span></div>
   ${notes.map(n=>`<div class="banner soft"><span>${esc(n)}</span></div>`).join('')}
-  <div class="tbl-wrap"><table class="qt"><thead><tr><th>Option</th><th>ขนาด</th><th>อินเวอร์เตอร์</th><th>แบตเตอรี่</th><th class="r">ประหยัด/เดือน</th><th class="r">ราคารวม VAT</th><th class="r">คืนทุน</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-  <div class="acts">${canDownload()?`<button class="btn pri" data-act="pptx">ดาวน์โหลด Proposal (.pptx)</button>`:''}</div>
+  <div class="tbl-wrap"><table class="qt"><thead><tr><th title="เสนอในไฟล์">ใส่ในไฟล์</th><th>Option</th><th>ขนาด</th><th>อินเวอร์เตอร์</th><th>แบตเตอรี่</th><th class="r">ประหยัด/เดือน</th><th class="r">ราคารวม VAT</th><th class="r">คืนทุน</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  ${D.ok?'':`<div class="banner soft"><span>${esc(D.why)}</span></div>`}
+  <div class="acts">${canDownload()?`<button class="btn pri" data-act="pptx" ${D.ok?'':'disabled'}>ดาวน์โหลด Proposal (.pptx)${D.ok?` · ${D.opts.length} Option`:''}</button>`:''}</div>
   <span class="note">ไฟล์ PowerPoint แก้ไขได้ทุกหน้า มีกรอบให้คลิกใส่รูปหลังคา อุปกรณ์จริง และผลงานที่ผ่านมา · ราคาเป็นราคามาตรฐาน แก้ได้ในไฟล์ proposal.js</span>`;
 }
 async function proposalPptx(j,btn){const D=ST_PROPOSAL.calc(ppIn(j));if(!D.ok){toast(D.why);return}
@@ -1070,7 +1076,7 @@ function addAppt(jobId,f){const j=S.jobs.get(jobId);if(!j||!f.date)return;const 
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy],[data-useopt]');if(!t)return;
   if(t.matches('[data-copy]')){copy(t.dataset.copy,'คัดลอกอีเมลแล้ว');return}
-  if(t.matches('[data-useopt]')){const id=S.open,j=S.jobs.get(id);if(!j||!window.ST_PROPOSAL)return;const o=ST_PROPOSAL.calc(ppIn(j)).opts[+t.dataset.useopt];if(!o)return;
+  if(t.matches('[data-useopt]')){const id=S.open,j=S.jobs.get(id);if(!j||!window.ST_PROPOSAL)return;const o=(ST_PROPOSAL.calc(ppIn(j)).all||[]).find(x=>x.key===t.dataset.useopt);if(!o)return;
     const go=()=>saveJob(id,{kw:o.kwp,type:o.hyb?'hybrid':'ongrid',inv:o.inv,quote:{items:o.items.map(x=>({...x}))},proposal:{rec:o.name}},`ใช้ ${o.name} ${fk2(o.kwp)} kWp จาก Proposal ในใบเสนอราคา`).then(()=>{S.tab='quote';renderDrawer(true);toast('สร้างรายการใบเสนอราคาจาก Proposal แล้ว')});
     (j.quote?.items||[]).length?arm(t,'แทนที่รายการเดิม? กดอีกครั้ง',go):go();return}
   if(t.matches('[data-btab]')){S.bTab=t.dataset.btab;renderView();return}
@@ -1174,7 +1180,9 @@ $('#drawer').addEventListener('change',e=>{const el=e.target;const id=S.open;con
   else if(el.dataset.loc){const v=el.value.trim();const p=parseLoc(v);if(!v){saveJob(id,{lat:null,lng:null,mapUrl:''},'ลบตำแหน่ง');return}
     if(p)saveJob(id,{lat:p.lat,lng:p.lng,mapUrl:/^https?:/.test(v)?v:''},'บันทึกตำแหน่ง Google Maps');
     else{saveJob(id,{mapUrl:/^https?:/.test(v)?v:''},'บันทึกลิงก์ Google Maps');toast('อ่านพิกัดจากลิงก์นี้ไม่ได้ (ลิงก์ย่อ) ปุ่มเปิดใน Google Maps ยังใช้ได้ ถ้าจะแสดงบนแผนที่ให้วางตัวเลขพิกัดแทน')}}
-  else if(el.dataset.pp){const k=el.dataset.pp;const v=(k==='mode'||k==='rec'||k==='brand')?el.value:(el.value===''?'':Math.max(0,+el.value||0));if((j.proposal||{})[k]===v)return;saveJob(id,{proposal:{[k]:v}})}
+  else if(el.dataset.ppbrand){const cur=ppIn(j).brands;const b=el.dataset.ppbrand;const next=el.checked?[...new Set([...cur,b])]:cur.filter(x=>x!==b);if(!next.length){el.checked=true;toast('เลือกอย่างน้อย 1 ยี่ห้อ');return}saveJob(id,{proposal:{brands:next}})}
+  else if(el.dataset.ppoff){const cur=ppIn(j).off;const k=el.dataset.ppoff;const next=el.checked?cur.filter(x=>x!==k):[...new Set([...cur,k])];saveJob(id,{proposal:{off:next}})}
+  else if(el.dataset.pp){const k=el.dataset.pp;const v=(k==='mode'||k==='rec'||k==='brand'||k==='sell')?el.value:(el.value===''?'':Math.max(0,+el.value||0));if((j.proposal||{})[k]===v)return;saveJob(id,{proposal:{[k]:v}})}
   else if(el.dataset.q){const k=el.dataset.q;let v=el.value;if(k!=='status')v=+v||0;const SL={draft:'ร่าง',sent:'ส่งลูกค้าแล้ว',approved:'ลูกค้าอนุมัติ',rejected:'ไม่ผ่าน'};saveJob(id,{quote:{[k]:v}},k==='status'?`ใบเสนอราคา: ${SL[v]}`:null)}
   else if(el.dataset.i!=null){const items=(j.quote?.items||[]).map(x=>({...x}));const it=items[+el.dataset.i];if(!it)return;it[el.dataset.k]=(el.dataset.k==='q'||el.dataset.k==='p')?(+el.value||0):el.value;saveJob(id,{quote:{items}})}
   else if(el.dataset.doc){const k=el.dataset.doc;const txt=DOCS.flatMap(g=>g.items).find(x=>x[0]===k)[1];saveJob(id,{permits:{[k]:{done:el.checked,at:Date.now(),by:S.me}}},`${el.checked?'✓':'ยกเลิก'} ${txt}`)}
