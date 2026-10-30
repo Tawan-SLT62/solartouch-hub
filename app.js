@@ -123,8 +123,12 @@ function buildItems(j){
   ];
 }
 function jobCode(){const d=new Date();return `ST-${String(d.getFullYear()+543).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${Math.floor(100+Math.random()*900)}`}
+/* กลุ่มลูกค้า: กลุ่ม 1 SPECIAL (ส้ม) · กลุ่ม 2 Normal (เขียว) */
+const GRP={special:['กลุ่ม 1','SPECIAL'],normal:['กลุ่ม 2','Normal']};
+const grpOf=j=>GRP[j&&j.grp]?j.grp:'';
+const grpTag=j=>{const g=grpOf(j);return g?`<span class="gtag g-${g}">${GRP[g][1]}</span>`:''};
 function makeJob(f,extra={}){const now=Date.now();const loc=parseLoc(f.loc);
-  const j={sv:2,code:jobCode(),name:f.name,phone:f.phone||'',email:(f.email||'').trim(),addr:f.addr||'',prov:f.prov||'',util:f.util||'PEA',phase:f.phase||'1',type:f.type||'ongrid',kw:+f.kw||5,roof:f.roof||ROOFS[0],note:'',
+  const j={sv:2,code:jobCode(),name:f.name,phone:f.phone||'',email:(f.email||'').trim(),addr:f.addr||'',prov:f.prov||'',util:f.util||'PEA',phase:f.phase||'1',type:f.type||'ongrid',grp:GRP[f.grp]?f.grp:'normal',kw:+f.kw||5,roof:f.roof||ROOFS[0],note:'',
   lat:loc?loc.lat:null,lng:loc?loc.lng:null,mapUrl:f.loc&&/^https?:/.test(String(f.loc).trim())?String(f.loc).trim():'',
   pm:f.pm&&f.pm!=='_other'?f.pm:null,pmName:f.pm==='_other'?(f.pmName||''):'',
   stage:'lead',stageAt:now,steps:{lead:now},createdAt:now,updatedAt:now,createdBy:S.me,updatedBy:S.me,owner:S.me,
@@ -197,7 +201,7 @@ function teamOpts(sel,withOther){const ids=teamIds().sort((a,b)=>nm(a).localeCom
   return `<option value="">— ยังไม่กำหนด —</option>${ids.map(id=>`<option value="${esc(id)}" ${sel===id?'selected':''}>${esc(nm(id))}${id===S.me?' (คุณ)':''}</option>`).join('')}${withOther?`<option value="_other" ${sel==='_other'?'selected':''}>อื่นๆ (พิมพ์ชื่อเอง)</option>`:''}`}
 
 /* ---------- demo data ---------- */
-function demoJobs(){const js=demoJobsBase();js[0].proposal={mode:'bill',bill:3500,tariff:4.4,dayPct:65,maxKwp:6};js[1].proposal={mode:'bill',bill:6000,tariff:4.4,dayPct:60,maxKwp:8.45};return js}
+function demoJobs(){const js=demoJobsBase();js[0].proposal={mode:'bill',bill:3500,tariff:4.4,dayPct:65,maxKwp:6};js[1].proposal={mode:'bill',bill:6000,tariff:4.4,dayPct:60,maxKwp:8.45};js.forEach((j,i)=>{j.grp=i%3===0?'special':'normal'});return js}
 function demoJobsBase(){const D=86400000,now=Date.now(),today=new Date();const dd=n=>ymd(new Date(today.getFullYear(),today.getMonth(),today.getDate()+n));
   const mk=(f,stage,agoD,perm=[],extra={})=>{const j=makeJob(f,{demo:true});const at=now-agoD*D;j.stage=stage;j.stageAt=at;j.createdAt=at-5*D;j.updatedAt=at;j.steps={};STAGES.slice(0,SIDX[stage]+1).forEach((s,i)=>j.steps[s.k]=at-(SIDX[stage]-i)*2*D);perm.forEach(k=>j.permits[k]={done:true,at,by:S.me});j.log=[{t:j.createdAt,by:S.me,m:'สร้างงานใหม่ (ตัวอย่าง)'},{t:at,by:S.me,m:`ย้ายไปขั้น “${STAGES[SIDX[stage]].t}”`}];Object.assign(j,extra);return j};
   const T=[...S.team];
@@ -316,8 +320,8 @@ function evRow(e,showDate=true){const c=(APPT[e.type]||APPT.other)[1];
 function cardHTML(j){
   const i=SIDX[j.stage];const dd=days(j.stageAt);const pp=permitProg(j);const vw=viewersOf(j.id);const tot=quoteTotals(j).total;
   const today=ymd(new Date());const nx=(j.appts||[]).filter(a=>a.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
-  return `<button class="card" draggable="${canEditJob(j)}" data-open="${j.id}" data-id="${j.id}">
-    <span class="r1"><span class="code">${esc(j.code)}</span>${j.demo?'<span class="tag demo">ตัวอย่าง</span>':''}<span class="sp">${hasLoc(j)?'<svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}${vw.length?`<span class="watch" title="มีคนกำลังเปิดดู"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>${vw.length}</span>`:''}${j.stage!=='done'&&dd>=7?`<span class="tag ${dd>=14?'bad':'warn'}">${dd} วัน</span>`:''}</span></span>
+  return `<button class="card${grpOf(j)?' g-'+grpOf(j):''}" draggable="${canEditJob(j)}" data-open="${j.id}" data-id="${j.id}">
+    <span class="r1">${grpTag(j)}<span class="code">${esc(j.code)}</span>${j.demo?'<span class="tag demo">ตัวอย่าง</span>':''}<span class="sp">${hasLoc(j)?'<svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}${vw.length?`<span class="watch" title="มีคนกำลังเปิดดู"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>${vw.length}</span>`:''}${j.stage!=='done'&&dd>=7?`<span class="tag ${dd>=14?'bad':'warn'}">${dd} วัน</span>`:''}</span></span>
     <span class="nm">${esc(j.name)}</span>
     <span class="loc">${esc(j.prov||'ไม่ระบุจังหวัด')} · ${j.util==='MEA'?'กฟน.':'กฟภ.'} · ${j.phase==='3'?'3 เฟส':'1 เฟส'}${j.type==='hybrid'?' · Hybrid':''}</span>
     ${nx?`<span class="next" style="--c:${(APPT[nx.type]||APPT.other)[1]}">${dTH(parseYmd(nx.date))}${nx.time?' '+esc(nx.time):''} · ${esc((APPT[nx.type]||APPT.other)[0])}</span>`:''}
@@ -334,7 +338,7 @@ function listHTML(){let all=visibleJobs();if(S.stageFilter)all=all.filter(j=>j.s
   return `<div class="tools"><button class="chip" data-filter="" aria-pressed="${!S.stageFilter}">ทั้งหมด</button>${STAGES.map(s=>`<button class="chip" data-filter="${s.k}" aria-pressed="${S.stageFilter===s.k}">${esc(s.s)}</button>`).join('')}</div>
   <div class="tools">${pmFilterHTML()}<span style="margin-left:auto"></span>${canDownload()?`<button class="btn sm" data-act="csv">ส่งออก CSV</button>`:''}</div>
   <div class="tbl-wrap"><table><thead><tr><th>รหัสงาน</th><th>ลูกค้า</th><th>จังหวัด</th><th class="r">ขนาด</th><th>ขั้นตอน</th><th>ผู้ดูแลโครงการ</th><th>เอกสาร</th><th>รูป</th><th class="r">มูลค่า (รวม VAT)</th><th>อัปเดต</th></tr></thead><tbody>
-  ${all.map(j=>{const pp=permitProg(j),ph=photoProg(j);return `<tr data-open="${j.id}"><td class="num">${esc(j.code)}</td><td><b>${esc(j.name)}</b><br><span class="muted num" style="font-size:12.5px">${esc(j.phone)}</span>${j.email?`<br><span class="muted" style="font-size:12.5px">${esc(j.email)}</span>`:''}</td><td>${esc(j.prov)}${hasLoc(j)?' <svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}</td><td class="r num">${fmt1(j.kw)} kWp</td><td>${stagePill(j.stage)}</td><td>${esc(pmName(j)||'–')}</td><td class="num">${pp.d}/${pp.n}</td><td class="num">${ph.d}/${ph.n}</td><td class="r num">${can('quote.view')?fmt(quoteTotals(j).total):'–'}</td><td class="muted">${ago(j.updatedAt)}</td></tr>`}).join('')||`<tr><td colspan="10" class="muted">ไม่พบงานที่ตรงกับตัวกรอง</td></tr>`}
+  ${all.map(j=>{const pp=permitProg(j),ph=photoProg(j);return `<tr data-open="${j.id}"${grpOf(j)?` class="g-${grpOf(j)}"`:''}><td class="num">${esc(j.code)}${grpOf(j)?`<br>${grpTag(j)}`:''}</td><td><b>${esc(j.name)}</b><br><span class="muted num" style="font-size:12.5px">${esc(j.phone)}</span>${j.email?`<br><span class="muted" style="font-size:12.5px">${esc(j.email)}</span>`:''}</td><td>${esc(j.prov)}${hasLoc(j)?' <svg class="ic" viewBox="0 0 24 24" aria-label="มีตำแหน่ง"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z" fill="currentColor"/></svg>':''}</td><td class="r num">${fmt1(j.kw)} kWp</td><td>${stagePill(j.stage)}</td><td>${esc(pmName(j)||'–')}</td><td class="num">${pp.d}/${pp.n}</td><td class="num">${ph.d}/${ph.n}</td><td class="r num">${can('quote.view')?fmt(quoteTotals(j).total):'–'}</td><td class="muted">${ago(j.updatedAt)}</td></tr>`}).join('')||`<tr><td colspan="10" class="muted">ไม่พบงานที่ตรงกับตัวกรอง</td></tr>`}
   </tbody></table></div>`}
 
 /* ---------- calendar ---------- */
@@ -743,7 +747,7 @@ function renderDrawer(force){
   if(S.mini){S.mini.remove();S.mini=null}
   const ph=photoProg(j);
   el.innerHTML=`<div class="d-head">
-    <div class="d-top"><div class="t"><div class="code"><span>${esc(j.code)}</span>${j.demo?'<span class="tag demo">ตัวอย่าง</span>':''}<span>อัปเดต ${ago(j.updatedAt)} โดย ${esc(nm(j.updatedBy))}</span></div><h2>${esc(j.name)}</h2>${pmName(j)?`<div class="pmline">${pmAv(j,'sm')}<span>ผู้ดูแลโครงการ: <b>${esc(pmName(j))}</b></span></div>`:''}</div>
+    <div class="d-top"><div class="t"><div class="code">${grpTag(j)}<span>${esc(j.code)}</span>${j.demo?'<span class="tag demo">ตัวอย่าง</span>':''}<span>อัปเดต ${ago(j.updatedAt)} โดย ${esc(nm(j.updatedBy))}</span></div><h2>${esc(j.name)}</h2>${pmName(j)?`<div class="pmline">${pmAv(j,'sm')}<span>ผู้ดูแลโครงการ: <b>${esc(pmName(j))}</b></span></div>`:''}</div>
     <button class="x" data-act="close" aria-label="ปิด"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${!canEditJob(j0)&&S.baseWrite!==false?`<div class="banner soft" style="margin:0"><span>ดูได้อย่างเดียว · งานนี้แก้ไขได้เฉพาะ${pmName(j)?' '+esc(pmName(j))+' (ผู้ดูแลโครงการ) และ':''}ผู้ดูแลระบบ</span></div>`:''}
     ${vIds.length?`<div class="seen">${vIds.map(id=>av(id,'sm')).join('')}<span>${vIds.map(id=>esc(nm(id))).join(', ')} กำลังเปิดงานนี้อยู่</span></div>`:''}
@@ -769,6 +773,7 @@ function infoTab(j,dis){
   </div>
   <div class="form">
     <div class="fld full"><label for="f-name">ชื่อลูกค้า</label><input class="in" id="f-name" data-f="name" value="${esc(j.name)}" ${dis}></div>
+    <div class="fld"><label for="f-grp">กลุ่มลูกค้า</label><select class="in" id="f-grp" data-f="grp" ${dis}>${grpOf(j)?'':'<option value="" selected>ยังไม่ระบุ</option>'}${opt([['special','กลุ่ม 1 · SPECIAL'],['normal','กลุ่ม 2 · Normal']],j.grp)}</select></div>
     <div class="fld"><label for="f-phone">เบอร์โทร</label><input class="in num" id="f-phone" data-f="phone" type="tel" value="${esc(j.phone)}" ${dis}></div>
     <div class="fld"><label for="f-email">อีเมล</label><div class="team-add"><input class="in" id="f-email" data-f="email" type="email" value="${esc(j.email||'')}" placeholder="name@example.com" ${dis}>${j.email?`<button class="btn" data-copy="${esc(j.email)}" aria-label="คัดลอกอีเมล">คัดลอก</button>`:''}</div></div>
     <div class="fld"><label for="f-prov">จังหวัด</label><input class="in" id="f-prov" data-f="prov" value="${esc(j.prov)}" ${dis}></div>
@@ -1026,7 +1031,7 @@ async function saveFile(name,data,type){
   if(BK.kind==='artifact'){try{await dl.save({filename:name,data})}catch(e){if(!e||e.code!=='declined')toast('บันทึกไฟล์ไม่สำเร็จ')}return}
   const url=URL.createObjectURL(new Blob([data],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000)}
 function printQuote(j){const url=URL.createObjectURL(new Blob([quoteDoc(j,true)],{type:'text/html'}));const w=window.open(url,'_blank');if(!w){saveFile(`ใบเสนอราคา-${j.code}.html`,quoteDoc(j,false),'text/html');toast('เบราว์เซอร์บล็อกหน้าต่างใหม่ จึงดาวน์โหลดไฟล์ให้แทน')}setTimeout(()=>URL.revokeObjectURL(url),60000)}
-function csv(){const rows=[['รหัสงาน','ลูกค้า','โทร','อีเมล','จังหวัด','การไฟฟ้า','kWp','ขั้นตอน','ผู้ดูแลโครงการ','เอกสาร','หมวดรูป','มูลค่ารวม VAT','ละติจูด','ลองจิจูด','อัปเดตล่าสุด']];visibleJobs().forEach(j=>{const pp=permitProg(j),ph=photoProg(j);rows.push([j.code,j.name,j.phone,j.email||'',j.prov,j.util,j.kw,STAGES[SIDX[j.stage]].t,pmName(j),`${pp.d}/${pp.n}`,`${ph.d}/${ph.n}`,Math.round(quoteTotals(j).total),hasLoc(j)?j.lat:'',hasLoc(j)?j.lng:'',new Date(j.updatedAt).toISOString()])});return '﻿'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')}
+function csv(){const rows=[['รหัสงาน','กลุ่มลูกค้า','ลูกค้า','โทร','อีเมล','จังหวัด','การไฟฟ้า','kWp','ขั้นตอน','ผู้ดูแลโครงการ','เอกสาร','หมวดรูป','มูลค่ารวม VAT','ละติจูด','ลองจิจูด','อัปเดตล่าสุด']];visibleJobs().forEach(j=>{const pp=permitProg(j),ph=photoProg(j);rows.push([j.code,grpOf(j)?`${GRP[grpOf(j)][0]} ${GRP[grpOf(j)][1]}`:'',j.name,j.phone,j.email||'',j.prov,j.util,j.kw,STAGES[SIDX[j.stage]].t,pmName(j),`${pp.d}/${pp.n}`,`${ph.d}/${ph.n}`,Math.round(quoteTotals(j).total),hasLoc(j)?j.lat:'',hasLoc(j)?j.lng:'',new Date(j.updatedAt).toISOString()])});return '﻿'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n')}
 async function copy(txt,okMsg){try{await navigator.clipboard.writeText(txt);toast(okMsg)}catch{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(okMsg)}catch{toast('คัดลอกไม่สำเร็จ')}ta.remove()}}
 
 /* ---------- modals ---------- */
@@ -1034,6 +1039,7 @@ function modal(title,inner){const m=$('#modal');m.hidden=false;$('#scrim').hidde
   m.innerHTML=`<div class="box" role="dialog" aria-label="${esc(title)}"><div class="mh"><h2>${esc(title)}</h2><button class="x" data-act="mclose" aria-label="ปิด"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>${inner}</div>`}
 function openNew(){if(!S.canWrite)return;
   modal('งานติดตั้งใหม่',`<form id="nf"><div class="form">
+    <div class="fld full"><label>กลุ่มลูกค้า</label><div class="seg grpseg"><label><input type="radio" name="grp" value="special"><span class="g-special">กลุ่ม 1 · SPECIAL</span></label><label><input type="radio" name="grp" value="normal" checked><span class="g-normal">กลุ่ม 2 · Normal</span></label></div></div>
     <div class="fld full"><label for="n-name">ชื่อลูกค้า</label><input class="in" id="n-name" name="name" required placeholder="คุณ…"></div>
     <div class="fld"><label for="n-phone">เบอร์โทร</label><input class="in" id="n-phone" name="phone" type="tel" placeholder="08x-xxx-xxxx"></div>
     <div class="fld"><label for="n-email">อีเมล</label><input class="in" id="n-email" name="email" type="email" placeholder="name@example.com" autocomplete="off"></div>
@@ -1163,7 +1169,7 @@ $('#q').addEventListener('input',e=>{S.q=e.target.value;if(S.view==='team'||S.vi
 
 $('#drawer').addEventListener('change',e=>{const el=e.target;const id=S.open;const j=S.jobs.get(id);if(!j)return;
   if(el.dataset.upload||el.closest('form.apptf')||el.closest('form.payf'))return;
-  if(el.dataset.f){const k=el.dataset.f;let v=el.value;if(k==='kw'||k==='inv')v=+v||0;if(j[k]===v)return;const L={name:'ชื่อลูกค้า',phone:'เบอร์โทร',email:'อีเมล',prov:'จังหวัด',addr:'ที่อยู่',util:'การไฟฟ้า',phase:'มิเตอร์',type:'ประเภทระบบ',kw:'ขนาดระบบ',inv:'ขนาด Inverter',roof:'ชนิดหลังคา',note:'บันทึกหน้างาน',pmName:'ผู้ดูแลโครงการ'};saveJob(id,{[k]:v},k==='pmName'?`กำหนดผู้ดูแลโครงการ: ${v}`:`แก้ไข${L[k]||k}`)}
+  if(el.dataset.f){const k=el.dataset.f;let v=el.value;if(k==='kw'||k==='inv')v=+v||0;if(j[k]===v)return;const L={name:'ชื่อลูกค้า',phone:'เบอร์โทร',email:'อีเมล',prov:'จังหวัด',addr:'ที่อยู่',util:'การไฟฟ้า',phase:'มิเตอร์',type:'ประเภทระบบ',kw:'ขนาดระบบ',inv:'ขนาด Inverter',roof:'ชนิดหลังคา',grp:'กลุ่มลูกค้า',note:'บันทึกหน้างาน',pmName:'ผู้ดูแลโครงการ'};saveJob(id,{[k]:v},k==='pmName'?`กำหนดผู้ดูแลโครงการ: ${v}`:`แก้ไข${L[k]||k}`)}
   else if(el.dataset.pm){const v=el.value;if(v==='_other'){saveJob(id,{pm:null,pmName:j.pmName||'',pmOther:true}).then(()=>renderDrawer(true));return}saveJob(id,{pm:v||null,pmName:'',pmOther:false},v?`กำหนดผู้ดูแลโครงการ: ${nm(v)}`:'ยกเลิกผู้ดูแลโครงการ').then(()=>renderDrawer(true))}
   else if(el.dataset.loc){const v=el.value.trim();const p=parseLoc(v);if(!v){saveJob(id,{lat:null,lng:null,mapUrl:''},'ลบตำแหน่ง');return}
     if(p)saveJob(id,{lat:p.lat,lng:p.lng,mapUrl:/^https?:/.test(v)?v:''},'บันทึกตำแหน่ง Google Maps');

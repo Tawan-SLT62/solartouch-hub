@@ -480,3 +480,16 @@ textarea.in{height:auto;min-height:84px;padding:9px 11px;resize:vertical}
   .crow>:nth-child(1){grid-column:1/2}.crow>:nth-child(2){grid-column:2/4}
   .crow>:nth-child(3){grid-column:1/2}.crow>:nth-child(4){grid-column:2/3;align-items:flex-end;text-align:right}.crow>:nth-child(5){grid-column:3/4}
 }
+
+/* กลุ่มลูกค้า */
+.card.g-special{border-left:5px solid #F0661A}
+.card.g-normal{border-left:5px solid #11905A}
+tr.g-special>td:first-child{box-shadow:inset 5px 0 0 #F0661A}
+tr.g-normal>td:first-child{box-shadow:inset 5px 0 0 #11905A}
+.gtag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:1px 7px;border-radius:999px;color:#fff;line-height:1.6;font-family:var(--f-sans,inherit)}
+.gtag.g-special{background:#F0661A}
+.gtag.g-normal{background:#11905A}
+.d-head .code .gtag{margin-right:2px}
+.grpseg input:checked+span.g-special{background:#F0661A;color:#fff}
+.grpseg input:checked+span.g-normal{background:#11905A;color:#fff}
+.card .r1 .code{white-space:nowrap}.card .r1 .gtag{flex:none}
