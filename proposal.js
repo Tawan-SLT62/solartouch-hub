@@ -42,6 +42,9 @@
       Huawei: { ongrid: [10, 15, 20], hybrid: [10, 15, 20] }
     },
     sellRate: 2.2,        // ราคารับซื้อไฟคืน (บาท/หน่วย) ค่าเริ่มต้น
+    // มิเตอร์ TOU บ้านอยู่อาศัย: ค่าไฟต่อหน่วยรวม Ft และ VAT (ค่าเริ่มต้นโดยประมาณ แก้ได้ในหน้า Proposal)
+    // On-peak จ.–ศ. 09:00–22:00 · Off-peak 22:00–09:00 และ ส.–อา. ทั้งวัน
+    touOn: 6.42, touOff: 3.03, touMeterCost: 0,
     peakFactor: 0.7,      // พีคเฉลี่ยทั้งปี ≈ 70% ของกำลังติดตั้ง
     company: { name: 'Solar Touch Company Limited', phone: '098-246-3030', web: 'www.solartouch.co.th' }
   };
@@ -52,7 +55,8 @@
   const OPT_DEFS = [['On-Grid', false, -1, 'ongrid'], ['Hybrid', true, 0, 'hybrid'], ['Hybrid แบตใหญ่', true, 1, 'hybrid2']];
 
   /* ---------- calculation ---------- */
-  // input: {phase, mode:'bill'|'units', bill, units, tariff, dayPct, maxKwp, backupW, yield, brands:[...], off:[option keys]}
+  // input: {phase, meter:'normal'|'tou', mode:'bill'|'units', bill, units, tariff, onUnits, offUnits, touOn, touOff, toTou, touMeterCost,
+  //         dayPct, maxKwp, backupW, yield, sell, sellRate, brands:[...], off:[option keys]}
   function calc(input, over) {
     const P = Object.assign({}, DEFAULTS, over || {});
     const i = input || {};
@@ -62,12 +66,18 @@
     const backupW = +i.backupW > 0 ? +i.backupW : P.backupW;
     const W = P.panelW;
     const phase = String(i.phase) === '3' ? 3 : 1;
-    const kwh = i.mode === 'units' ? (+i.units || 0) : (+i.bill || 0) / T;
-    const bill = i.mode === 'units' ? kwh * T : (+i.bill || 0);
     const maxKwp = +i.maxKwp > 0 ? +i.maxKwp : null;
     const sell = !!i.sell && i.sell !== 'no', sellRate = sell ? (+i.sellRate > 0 ? +i.sellRate : P.sellRate) : 0;
-    const D = { T, Y, W, day, phase, kwh, bill, backupW, maxKwp, sell, sellRate, dD: kwh * day / 30, nD: kwh * (1 - day) / 30, opts: [], dropped: [], P };
-    if (!(kwh > 0)) return Object.assign(D, { ok: false, why: 'กรอกค่าไฟหรือจำนวนหน่วยต่อเดือน' });
+    const tou = i.meter === 'tou';
+    const rOn = +i.touOn > 0 ? +i.touOn : P.touOn, rOff = +i.touOff > 0 ? +i.touOff : P.touOff;
+    const onU = tou ? Math.max(0, +i.onUnits || 0) : 0, offU = tou ? Math.max(0, +i.offUnits || 0) : 0;
+    const kwh = tou ? onU + offU : i.mode === 'units' ? (+i.units || 0) : (+i.bill || 0) / T;
+    const bill = tou ? onU * rOn + offU * rOff : i.mode === 'units' ? kwh * T : (+i.bill || 0);
+    // หลังติดตั้ง: มิเตอร์ TOU (มีอยู่แล้ว หรือเปลี่ยนใหม่) หรือมิเตอร์ปกติเหมือนเดิม
+    const toTou = tou || i.toTou === 'yes';
+    const meterCost = !tou && toTou ? Math.max(0, +(i.touMeterCost ?? P.touMeterCost) || 0) : 0;
+    const D = { T: kwh > 0 ? bill / kwh : T, Y, W, day, phase, kwh, bill, backupW, maxKwp, sell, sellRate, tou, toTou, rOn, rOff, onU, offU, meterCost, opts: [], dropped: [], P };
+    if (!(kwh > 0)) return Object.assign(D, { ok: false, why: tou ? 'กรอกจำนวนหน่วย On-peak และ Off-peak ต่อเดือน' : 'กรอกค่าไฟหรือจำนวนหน่วยต่อเดือน' });
     const known = Object.keys(P.inverters1);
     let brands = (Array.isArray(i.brands) ? i.brands : i.brand ? [i.brand] : []).filter(b => known.includes(b));
     if (!brands.length) brands = [P.brand];
@@ -84,12 +94,49 @@
       return ok || L[L.length - 1];
     };
 
-    // โปรไฟล์รายชั่วโมง: การใช้ไฟของบ้าน และการผลิตไฟ (แดด 06:00–18:00)
+    // โปรไฟล์รายชั่วโมง: รูปแบบการใช้ไฟของบ้าน (ตามสัดส่วนกลางวัน) และการผลิตไฟ (แดด 06:00–18:00)
     const dw = []; for (let h = 6; h < 18; h++) dw.push(1 + 0.3 * Math.sin((h - 6) / 12 * Math.PI));
     const nh = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5], nw = nh.map(h => (h >= 18 && h < 23 ? 1.6 : 0.7));
     const sdw = dw.reduce((a, b) => a + b, 0), snw = nw.reduce((a, b) => a + b, 0);
-    const loadH = Array.from({ length: 24 }, (_, h) => (h >= 6 && h < 18 ? D.dD * dw[h - 6] / sdw : D.nD * nw[nh.indexOf(h)] / snw));
+    const shape = Array.from({ length: 24 }, (_, h) => (h >= 6 && h < 18 ? day * dw[h - 6] / sdw : (1 - day) * nw[nh.indexOf(h)] / snw));
     const sol = Array.from({ length: 24 }, (_, h) => (h >= 6 && h <= 18 ? Math.max(0, Math.sin((h - 6) / 12 * Math.PI)) : 0)), ss = sol.reduce((a, b) => a + b, 0);
+    // แยกวันทำงาน (จ.–ศ.) กับวันหยุด (ส.–อา.) เพราะค่าไฟ TOU ต่างกัน
+    const WD = 30 * 5 / 7, WE = 30 - WD;
+    const isOn = (h, wk) => wk && h >= 9 && h < 22;
+    let kWd = kwh / 30, kWe = kwh / 30;
+    if (tou) { // ปรับปริมาณการใช้ไฟวันทำงาน/วันหยุดให้ตรงกับหน่วย On-peak และ Off-peak ที่กรอก
+      const A = shape.reduce((a, v, h) => a + (isOn(h, true) ? v : 0), 0);
+      kWd = onU / (WD * A);
+      kWe = Math.max(0, (offU - WD * kWd * (1 - A)) / WE);
+    }
+    const DT = [{ n: WD, wk: true, load: shape.map(v => v * kWd) }, { n: WE, wk: false, load: shape.map(v => v * kWe) }];
+    const rateNow = (h, wk) => (tou ? (isOn(h, wk) ? rOn : rOff) : D.T);
+    const rateAfter = (h, wk) => (toTou ? (isOn(h, wk) ? rOn : rOff) : D.T);
+    const avgLoad = Array.from({ length: 24 }, (_, h) => DT.reduce((a, t) => a + t.n * t.load[h], 0) / 30);
+    D.dD = avgLoad.reduce((a, v, h) => a + (h >= 6 && h < 18 ? v : 0), 0);
+    D.nD = avgLoad.reduce((a, v, h) => a + (h >= 6 && h < 18 ? 0 : v), 0);
+    D.day = D.dD / (D.dD + D.nD);
+    const billNow = DT.reduce((a, t) => a + t.n * t.load.reduce((b, l, h) => b + l * rateNow(h, t.wk), 0), 0);
+    // ค่าไฟถ้าเปลี่ยนเป็น TOU แต่ยังไม่ติดโซลาร์ (แยกผลจากการเปลี่ยนมิเตอร์)
+    D.billTouOnly = !tou && toTou ? DT.reduce((a, t) => a + t.n * t.load.reduce((b, l, h) => b + l * rateAfter(h, t.wk), 0), 0) : null;
+    // จำลองหนึ่งวัน เริ่ม 06:00 แบตว่าง: ใช้ไฟจากแผงก่อน ส่วนเกินชาร์จแบต แล้วจ่ายจากแบตเมื่อแผงไม่พอ
+    const simulate = (prod, cap) => {
+      let after = 0, exp = 0, dis = 0, self = 0;
+      DT.forEach(t => {
+        let soc = 0, a = 0, e = 0, ds = 0, sf = 0;
+        for (let k = 6; k < 30; k++) {
+          const h = k % 24, v = prod * sol[h] / ss, l = t.load[h];
+          const d = Math.min(v, l); let sur = v - d, def = l - d; sf += d;
+          if (cap > 0) {
+            const c = Math.min(sur * P.battEff, cap - soc); soc += c; sur -= c / P.battEff;
+            const x = Math.min(def, soc); soc -= x; def -= x; ds += x;
+          }
+          e += sur; a += def * rateAfter(h, t.wk);
+        }
+        after += t.n * a; exp += t.n * e; dis += t.n * ds; self += t.n * sf;
+      });
+      return { after, exp, dis, self };
+    };
 
     const build = (name, hyb, bi, forcePan, brand) => {
       const B = hyb ? P.batteries[bi] : null, bk = B ? B.kwh : 0, nb = B ? 1 : 0;
@@ -101,19 +148,19 @@
       const kwp = pan * W / 1000;
       const ik = pickInv(kwp, hyb, brand);
       const prod = kwp * Y;
-      // คิดรายชั่วโมง: ไฟที่ผลิตตรงกับช่วงที่บ้านใช้ = ใช้เองทันที ส่วนเกิน = ชาร์จแบต (ไฮบริด) หรือส่งออก
-      let direct = 0, surplus = 0;
-      sol.forEach((x, h) => { const v = prod * x / ss; direct += Math.min(v, loadH[h]); surplus += Math.max(0, v - loadH[h]); });
-      const st = hyb ? Math.min(surplus * P.battEff, us, D.dD + D.nD - direct) : 0;
-      const saveBill = (direct + st) * 30 * T;
+      // คิดรายชั่วโมง แยกวันทำงาน/วันหยุด และค่าไฟตามช่วงเวลา (มิเตอร์ปกติ หรือ TOU)
+      const sim = simulate(prod, hyb ? us : 0);
+      const saveBill = billNow - sim.after;
+      const st = sim.dis / 30;
       // ไฟที่เหลือจากการใช้ในบ้านและชาร์จแบต ขายคืนการไฟฟ้า
-      const exportD = Math.max(0, surplus - (hyb ? st / P.battEff : 0));
+      const exportD = sim.exp / 30;
       const sellMo = sell ? exportD * 30 * sellRate : 0;
       const save = saveBill + sellMo;
       const items = [
         { d: `แผงโซลาร์ N-type ${W}W Bi-Facial (Tier 1)`, q: pan, u: 'แผง', p: P.panelPrice },
         { d: `อินเวอร์เตอร์ ${brand} ${hyb ? 'Hybrid' : 'On-Grid'} ${ik} kW ${phase} เฟส (อยู่ในบัญชีการไฟฟ้า)`, q: 1, u: 'เครื่อง', p: invPrice(ik, hyb, P, brand, phase) },
         ...(B ? [{ d: `แบตเตอรี่ลิเธียม LFP ${bk} kWh`, q: 1, u: 'ชุด', p: B.price }] : []),
+        ...(meterCost ? [{ d: 'ค่าเปลี่ยนเป็นมิเตอร์ TOU (ชำระการไฟฟ้า)', q: 1, u: 'งาน', p: meterCost }] : []),
         { d: 'รางอะลูมิเนียมและอุปกรณ์ยึดหลังคา', q: pan, u: 'ชุด', p: P.mountPerPanel },
         { d: 'ตู้ DC/AC Protection (เบรกเกอร์ / Surge / ฟิวส์)', q: 1, u: 'ตู้', p: P.protection },
         { d: 'สาย PV1-F, สาย AC, ท่อร้อยสาย และกราวด์', q: 1, u: 'งาน', p: P.cables },
@@ -159,7 +206,7 @@
     D.capped = all.filter(o => o.capped).map(o => ({ name: o.name, brand: o.brand, inv: o.inv, kwp: o.kwp }));
     if (!D.opts.length) { D.ok = false; D.why = 'เลือก Option อย่างน้อย 1 รายการเพื่อใส่ในไฟล์ Proposal'; D.load = []; return D; }
     D.rec = D.opts[0];
-    D.load = loadH.map(v => +v.toFixed(2));
+    D.load = avgLoad.map(v => +v.toFixed(2));
     D.all.forEach(o => { o.prof = sol.map(s => +(o.prodMo / 30 * s / ss).toFixed(2)); });
     D.ok = true;
     return D;
@@ -271,7 +318,7 @@
     {
       const s = pres.addSlide({ masterName: 'ST Content', sectionTitle: 'การใช้ไฟของลูกค้า' });
       s.addText('การใช้ไฟปัจจุบัน', { placeholder: 'title' });
-      [['ค่าไฟต่อเดือน', '฿' + fmt(D.bill), ''], ['ใช้ไฟต่อเดือน', fmt(D.kwh), 'หน่วย'], ['มิเตอร์', D.phase + ' เฟส', ''], ['ค่าไฟเฉลี่ย', fmt1(D.T), 'บาท/หน่วย']].forEach(([l, v, u], i) => {
+      [['ค่าไฟต่อเดือน', '฿' + fmt(D.bill), ''], ['ใช้ไฟต่อเดือน', fmt(D.kwh), 'หน่วย'], ['มิเตอร์', D.phase + ' เฟส', D.tou ? 'TOU' : 'ปกติ'], ['ค่าไฟเฉลี่ย', fmt1(D.T), 'บาท/หน่วย']].forEach(([l, v, u], i) => {
         const x = 0.5 + (i % 2) * 2.3, y = 1.15 + Math.floor(i / 2) * 1.35;
         card(s, x, y, 2.1, 1.15, C.background2, 'Stat ' + l);
         s.addText(l, { x: x + 0.2, y: y + 0.15, w: 1.8, h: 0.3, fontSize: 11, color: C.accent5, margin: 0, isTextBox: true });
@@ -290,8 +337,10 @@
       card(s, 0.5, 3.95, 9.0, 1.05, C.background2, 'Design note');
       s.addText([
         { text: 'หลักการออกแบบ  ', options: { bold: true, color: C.text2 } },
-        { text: `ระบบออนกริดออกแบบให้พอดีกับไฟที่ใช้กลางวัน (${fmt1(D.dD)} หน่วย/วัน) ส่วนระบบไฮบริดเพิ่มแผงและแบตเตอรี่ เพื่อเก็บไฟไว้ใช้กลางคืน (${fmt1(D.nD)} หน่วย/คืน) คำนวณที่ ${fmt1(D.Y)} หน่วย/kWp/วัน`, options: { color: C.text1 } }
-      ], { x: 0.75, y: 4.05, w: 8.5, h: 0.85, fontSize: 13, valign: 'middle', margin: 0, isTextBox: true });
+        { text: `ระบบออนกริดออกแบบให้พอดีกับไฟที่ใช้กลางวัน (${fmt1(D.dD)} หน่วย/วัน) ส่วนระบบไฮบริดเพิ่มแผงและแบตเตอรี่ เพื่อเก็บไฟไว้ใช้กลางคืน (${fmt1(D.nD)} หน่วย/คืน) คำนวณที่ ${fmt1(D.Y)} หน่วย/kWp/วัน`, options: { color: C.text1, breakLine: D.toTou } },
+        ...(D.tou ? [{ text: `มิเตอร์ TOU: On-peak ${fmt(D.onU)} หน่วย (${D.rOn} บาท) · Off-peak ${fmt(D.offU)} หน่วย (${D.rOff} บาท) โซลาร์ผลิตไฟช่วง On-peak ที่ค่าไฟแพง`, options: { color: C.accent1, bold: true } }]
+          : D.toTou ? [{ text: `แนะนำเปลี่ยนเป็นมิเตอร์ TOU หลังติดตั้ง: กลางวันใช้ไฟจากโซลาร์ กลางคืนจ่ายค่าไฟ Off-peak ${D.rOff} บาท/หน่วย`, options: { color: C.accent1, bold: true } }] : [])
+      ], { x: 0.75, y: 4.05, w: 8.5, h: 0.85, fontSize: D.toTou ? 12 : 13, valign: 'middle', margin: 0, isTextBox: true });
     }
 
     // ---------- daily load vs production ----------
@@ -439,7 +488,7 @@
         row('ราคารวม VAT', o => `฿${fmt(o.cost)}`, true),
         row('คืนทุน', o => `${fmt1(o.payback)} ปี`, true)
       ], { x: 0.5, y: 1.0, w: 9.0, colW: [many ? 1.5 : 2.1, ...OPTS.map(() => (many ? 7.5 : 6.9) / OPTS.length)], fontSize: many ? 9.5 : D.sell ? 11 : 12, color: HEX.ink, border: { type: 'solid', pt: 0.5, color: 'D9E1EF' }, rowH: [0.5, ...Array(D.sell ? 10 : 8).fill(D.sell ? 0.29 : 0.34)], objectName: 'Options comparison table' });
-      s.addText(`* วงจรสำรอง ${fmt(D.backupW)} W (ตู้เย็น ไฟ Wi-Fi ปั๊มน้ำ) · ทุกระบบหยุดทำงานเมื่อไฟดับ ต้องทำระบบ Backup เพิ่ม (ยังไม่รวมในราคา)${D.sell ? ` · ขายไฟคืน ${D.sellRate} บาท/หน่วย` : ''}`,
+      s.addText(`* วงจรสำรอง ${fmt(D.backupW)} W (ตู้เย็น ไฟ Wi-Fi ปั๊มน้ำ) · ทุกระบบหยุดทำงานเมื่อไฟดับ ต้องทำระบบ Backup เพิ่ม (ยังไม่รวมในราคา)${D.sell ? ` · ขายไฟคืน ${D.sellRate} บาท/หน่วย` : ''}${D.toTou && !D.tou ? ` · คิดค่าไฟหลังติดตั้งด้วยมิเตอร์ TOU${D.meterCost ? ' รวมค่าเปลี่ยนมิเตอร์' : ''}` : ''}`,
         { x: 0.5, y: D.sell ? 4.75 : 4.55, w: 9.0, h: 0.5, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true });
       s.addNotes('ตัวเลขคำนวณจากโปรแกรม SOLARTOUCH ราคาเป็นราคามาตรฐาน แก้ได้ก่อนส่งลูกค้า');
     }
