@@ -94,7 +94,12 @@ const pmName=j=>j.pm?nm(j.pm):(j.pmName||'');
 const pmAv=(j,cls)=>j.pm?av(j.pm,cls):j.pmName?avName(j.pmName,cls):'';
 
 function quoteTotals(j){const items=j.quote?.items||[];const sub=items.reduce((a,i)=>a+(+i.q||0)*(+i.p||0),0);const disc=Math.max(0,+j.quote?.discount||0);const net=Math.max(0,sub-disc);const vat=net*0.07;return{sub,disc,net,vat,total:net+vat}}
-function estimate(j){const kw=+j.kw||0;const tariff=+(j.quote?.tariff??4.2)||4.2;const day=kw*KWH_PER_KWP_DAY;const month=day*30;const yearSave=day*365*tariff;const {total}=quoteTotals(j);return{month,monthSave:month*tariff,payback:yearSave?total/yearSave:0,ppw:kw?total/(kw*1000):0,tariff}}
+// Option ที่เลือกจาก Proposal (ปุ่ม "ใช้ในใบเสนอราคา") ถ้าขนาดยังตรงกับงาน
+function ppPick(j){const p=j.proposal||{};if(!window.ST_PROPOSAL||!(p.recKey||p.rec))return null;
+  try{const D=ST_PROPOSAL.calc(ppIn(j));const o=(D.all||[]).find(x=>p.recKey?x.key===p.recKey:x.name===p.rec);if(!o||Math.abs(o.kwp-(+j.kw||0))>0.01||!(o.save>0))return null;return{o,T:D.T}}catch(e){return null}}
+function estimate(j){const kw=+j.kw||0;const {total}=quoteTotals(j);const ppw=kw?total/(kw*1000):0;
+  const pk=ppPick(j);if(pk){const o=pk.o,ys=o.save*12;return{month:o.prodMo,monthSave:o.save,yearSave:ys,payback:ys?total/ys:0,ppw,tariff:Math.round(pk.T*100)/100,opt:o,total}}
+  const tariff=+(j.quote?.tariff??4.2)||4.2;const day=kw*KWH_PER_KWP_DAY;const month=day*30;const yearSave=day*365*tariff;return{month,monthSave:month*tariff,yearSave,payback:0,ppw,tariff,total}}
 function permitProg(j){const p=j.permits||{};const d=DOC_KEYS.filter(k=>p[k]?.done).length;return{d,n:DOC_KEYS.length,pct:Math.round(d/DOC_KEYS.length*100)}}
 function photoProg(j){const c=j.photos||{};const d=PHOTO_CATS.filter(([k])=>(c[k]||0)>0).length;return{d,n:PHOTO_CATS.length}}
 function stagePill(k){const s=STAGES[SIDX[k]]||STAGES[0];return `<span class="pill p-${s.g}">${esc(s.s)}</span>`}
@@ -195,10 +200,17 @@ function arm(btn,label,fn){if(btn.dataset.armed){fn();return}btn.dataset.armed='
 let wantQ=new Set(),wantT=0,userCap=null;
 function wantProfile(id){if(!id||!BK||BK.kind!=='artifact'||S.prof[id]||wantQ.has(id))return;wantQ.add(id);clearTimeout(wantT);wantT=setTimeout(resolveProfiles,30)}
 async function resolveProfiles(){if(!userCap)return;const ids=[...wantQ].filter(i=>!S.prof[i]);if(!ids.length)return;try{const ps=await userCap.profiles(ids);for(const id of ids){const p=ps[id]||{};S.prof[id]={name:p.name||'',photo:p.avatarUrl||''}}scheduleRender()}catch{}}
-function teamIds(){const ids=new Set(S.team);if(BK&&BK.kind==='firebase')Object.keys(S.prof).forEach(i=>ids.add(i));
+/* รายชื่อทีม: ตัดคนที่ถูกลบออกจากสมาชิก (Firebase) และคนที่ผู้ดูแลระบบซ่อนไว้ */
+const hiddenTeam=()=>new Set(((S.settings||{}).hiddenTeam)||[]);
+function activeId(id){if(!id)return false;if(id===S.me)return true;if(hiddenTeam().has(id))return false;
+  if(BK&&BK.kind==='firebase'){const em=((S.prof[id]||{}).email||'').toLowerCase();if(!em)return false;return ADMIN_EMAILS.includes(em)||S.members.some(m=>m.id===em)}
+  return true}
+function allTeamIds(){const ids=new Set(S.team);if(BK&&BK.kind==='firebase')Object.keys(S.prof).forEach(i=>ids.add(i));
   S.jobs.forEach(j=>{[j.owner,j.pm].forEach(x=>x&&ids.add(x))});if(S.me)ids.add(S.me);return [...ids].filter(Boolean)}
+function teamIds(){return allTeamIds().filter(activeId)}
 function teamOpts(sel,withOther){const ids=teamIds().sort((a,b)=>nm(a).localeCompare(nm(b),'th'));
-  return `<option value="">— ยังไม่กำหนด —</option>${ids.map(id=>`<option value="${esc(id)}" ${sel===id?'selected':''}>${esc(nm(id))}${id===S.me?' (คุณ)':''}</option>`).join('')}${withOther?`<option value="_other" ${sel==='_other'?'selected':''}>อื่นๆ (พิมพ์ชื่อเอง)</option>`:''}`}
+  if(sel&&sel!=='_other'&&!ids.includes(sel))ids.push(sel);
+  return `<option value="">— ยังไม่กำหนด —</option>${ids.map(id=>`<option value="${esc(id)}" ${sel===id?'selected':''}>${esc(nm(id))}${id===S.me?' (คุณ)':''}${activeId(id)?'':' (ไม่อยู่ในทีมแล้ว)'}</option>`).join('')}${withOther?`<option value="_other" ${sel==='_other'?'selected':''}>อื่นๆ (พิมพ์ชื่อเอง)</option>`:''}`}
 
 /* ---------- demo data ---------- */
 function demoJobs(){const js=demoJobsBase();js[0].proposal={mode:'bill',bill:3500,tariff:4.4,dayPct:65,maxKwp:6};js[1].proposal={mode:'bill',bill:6000,tariff:4.4,dayPct:60,maxKwp:8.45};js.forEach((j,i)=>{j.grp=i%3===0?'special':'normal'});return js}
@@ -398,7 +410,7 @@ function teamHTML(){
   if(!BK||BK.kind!=='firebase'){const ids=teamIds();
     return `${BK&&BK.kind==='demo'?`<div class="banner"><b>โหมดตัวอย่าง</b><span>ยังไม่ได้เชื่อมฐานข้อมูล รายชื่อด้านล่างเป็นทีมตัวอย่าง</span></div>`:''}<section class="panel"><h2>ทีมงานที่พบในระบบ <span class="count">${ids.length}</span></h2>
     <p class="note" style="margin:0">${BK&&BK.kind==='artifact'?'สมาชิกจะปรากฏที่นี่เมื่อเปิดหน้านี้หรือถูกกำหนดเป็นผู้ดูแลโครงการ เพิ่มคนเข้าใช้ได้จากเมนู Share ของหน้า':'รายชื่อสำหรับเลือกเป็นผู้ดูแลโครงการ'}</p>
-    <div class="list">${ids.map(id=>{const n=[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length;return `<div class="mem">${av(id)}<span style="min-width:0"><b>${esc(nm(id))}${id===S.me?' (คุณ)':''}</b><small>ดูแลโครงการที่กำลังดำเนินการ ${n} งาน</small></span><button class="btn sm" data-pmjump="${esc(id)}">ดูงาน</button></div>`}).join('')}</div></section>`}
+    <div class="list">${ids.map(id=>{const n=[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length;return `<div class="mem">${av(id)}<span style="min-width:0"><b>${esc(nm(id))}${id===S.me?' (คุณ)':''}</b><small>ดูแลโครงการที่กำลังดำเนินการ ${n} งาน</small></span><span class="mem-acts"><button class="btn sm" data-pmjump="${esc(id)}">ดูงาน</button>${hideBtn(id)}</span></div>`}).join('')}</div></section>${hiddenHTML()}`}
   const on=new Set(onlinePeers().map(p=>p.by));
   const byEmail={};Object.entries(S.prof).forEach(([id,p])=>{if(p.email)byEmail[p.email.toLowerCase()]=id});
   const rows=[...new Set([...ADMIN_EMAILS,...(S.isAdmin?[S.email]:[]),...S.members.map(m=>m.id)])].sort();
@@ -412,8 +424,18 @@ function teamHTML(){
   <section class="panel"><h2>สมาชิกที่เข้าใช้ได้ <span class="count">${rows.length}</span></h2>
     ${S.isAdmin?`<form class="team-add" id="addMember"><input class="in" id="memEmail" type="email" required placeholder="อีเมล Gmail ของสมาชิก เช่น somchai@gmail.com"><button class="btn pri" type="submit">เพิ่มสมาชิก</button></form>`:'<p class="note" style="margin:0">เฉพาะผู้ดูแลระบบเพิ่มหรือลบสมาชิกได้</p>'}
     <div class="list">${rows.map(e=>{const id=byEmail[e];const isA=ADMIN_EMAILS.includes(e)||(S.isAdmin&&e===S.email);const n=id?[...S.jobs.values()].filter(j=>j.pm===id&&j.stage!=='done').length:0;return `<div class="mem">${id?av(id):avName(e)}<span style="min-width:0"><b>${esc(id?nm(id):e)}</b><small>${esc(e)} · ${isA?'ผู้ดูแลระบบ':'สมาชิก'}${id?` · ดูแล ${n} งาน${on.has(id)?' · <span style="color:var(--good)">ออนไลน์</span>':''}`:' · ยังไม่เคยเข้าสู่ระบบ'}</small></span>${S.isAdmin&&!isA?`<button class="btn sm danger" data-rmmember="${esc(e)}">ลบ</button>`:''}</div>`}).join('')}</div>
-  </section>`;
+  </section>${oldNamesHTML()}`;
 }
+const canHide=()=>S.isAdmin&&!!BK;
+const hideBtn=id=>canHide()&&id!==S.me&&id!==S.ownerId?`<button class="btn sm danger" data-hideteam="${esc(id)}">นำออกจากรายชื่อ</button>`:'';
+function hiddenHTML(){const h=[...hiddenTeam()];if(!S.isAdmin||!h.length)return'';
+  return `<section class="panel"><h2>รายชื่อที่นำออกแล้ว <span class="count">${h.length}</span></h2><p class="note" style="margin:0">ไม่แสดงในช่องเลือกผู้ดูแลโครงการ ผู้รับผิดชอบนัด และหน้าสิทธิ์ งานเดิมที่เคยมอบหมายยังแสดงชื่อเดิมไว้</p>
+    <div class="list">${h.map(id=>`<div class="mem">${av(id)}<span style="min-width:0"><b>${esc(nm(id))}</b><small>นำออกจากรายชื่อแล้ว</small></span>${canHide()?`<button class="btn sm" data-unhideteam="${esc(id)}">แสดงอีกครั้ง</button>`:''}</div>`).join('')}</div></section>`}
+// Firebase: คนที่เคยเข้าสู่ระบบแต่ไม่อยู่ในรายชื่อสมาชิกแล้ว (ไม่แสดงในช่องเลือกอยู่แล้ว)
+function oldNamesHTML(){if(!S.isAdmin)return'';const old=allTeamIds().filter(id=>id!==S.me&&!activeId(id)&&!hiddenTeam().has(id)&&(S.prof[id]||{}).name);
+  return (old.length?`<section class="panel"><h2>ชื่อเก่าที่ไม่ได้เป็นสมาชิกแล้ว <span class="count">${old.length}</span></h2><p class="note" style="margin:0">ระบบไม่แสดงชื่อเหล่านี้ในช่องเลือกแล้ว กด “นำออกจากรายชื่อ” เพื่อซ่อนถาวร แม้ภายหลังจะถูกเพิ่มกลับเป็นสมาชิก</p>
+    <div class="list">${old.map(id=>`<div class="mem">${av(id)}<span style="min-width:0"><b>${esc(nm(id))}</b><small>${esc((S.prof[id]||{}).email||'')}</small></span>${hideBtn(id)}</div>`).join('')}</div></section>`:'')+hiddenHTML()}
+function setHidden(id,on){const h=hiddenTeam();on?h.add(id):h.delete(id);return upsert('settings','app',{hiddenTeam:[...h]},S.settings).then(()=>toast(on?`นำ ${nm(id)} ออกจากรายชื่อแล้ว`:`แสดง ${nm(id)} อีกครั้งแล้ว`)).catch(writeErr)}
 
 /* ---------- roles & permissions ---------- */
 const ROLES={admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ / ผู้ดูแลโครงการ',staff:'พนักงานทั่วไป'};
@@ -826,9 +848,11 @@ function quoteTab(j,dis){const t=quoteTotals(j);const e=estimate(j);const items=
     <div class="tot est"><span class="lbl">ประมาณการความคุ้มค่า</span>
       <div class="row"><span>ผลิตไฟได้ราว</span><span class="big num">${fmt(e.month)}<small style="font-size:13px"> หน่วย/เดือน</small></span></div>
       <div class="row"><span>ประหยัดค่าไฟราว</span><span class="num" style="font-weight:700">฿${fmt(e.monthSave)}/เดือน</span></div>
-      <div class="row"><span>คืนทุนประมาณ</span><span class="num" style="font-weight:700">${e.payback?e.payback.toFixed(1):'–'} ปี</span></div>
+      ${e.opt?`<div class="row"><span>คืนทุนประมาณ</span><span class="num" style="font-weight:700">${e.payback?e.payback.toFixed(1):'–'} ปี</span></div>
+      <div class="row muted"><span>วิธีคิด</span><span class="num" style="font-size:12.5px">${fmt(e.total)} ÷ (${fmt(e.monthSave)} × 12)</span></div>`:`<div class="row"><span>คืนทุนประมาณ</span><span class="muted" style="font-size:13px">ยังไม่ได้เลือก Option</span></div>`}
+      ${e.opt?`<span class="note">คิดจาก Proposal: <b>${esc(e.opt.name)} ${fk2(e.opt.kwp)} kWp</b>${e.opt.sellMo?' รวมขายไฟคืน':''} · ราคาใช้ยอดรวมใบเสนอราคานี้ · เปลี่ยน Option ได้ที่แท็บ Proposal กด "ใช้ในใบเสนอราคา"</span>`:`
       <div class="row"><label for="q-tariff">ค่าไฟเฉลี่ย (บาท/หน่วย)</label><input class="in" id="q-tariff" data-q="tariff" type="number" step="0.01" min="0" value="${esc(e.tariff)}" ${dis}></div>
-      <span class="note">คิดที่ ${KWH_PER_KWP_DAY} หน่วย/kWp/วัน และสมมติใช้ไฟที่ผลิตได้เองทั้งหมดในเวลากลางวัน</span></div>
+      <span class="note">คิดที่ ${KWH_PER_KWP_DAY} หน่วย/kWp/วัน และสมมติใช้ไฟที่ผลิตได้เองทั้งหมดในเวลากลางวัน · ระยะเวลาคืนทุนจะแสดงเมื่อเลือก Option ในแท็บ Proposal แล้วกด "ใช้ในใบเสนอราคา"</span>`}</div>
   </div>
   <div class="acts">${BK.kind!=='artifact'?`<button class="btn pri" data-act="printquote">พิมพ์ / บันทึกเป็น PDF</button>`:''}${canDownload()?`<button class="btn ${BK.kind==='artifact'?'pri':''}" data-act="savequote">ดาวน์โหลดใบเสนอราคา (.html)</button>`:''}<button class="btn" data-act="copyquote">คัดลอกสรุปส่งลูกค้า</button></div>`;
 }
@@ -840,7 +864,7 @@ let pptxLoad=null;
 function loadPptx(){if(window.PptxGenJS&&window.JSZip)return Promise.resolve();
   return pptxLoad||(pptxLoad=new Promise((ok,no)=>{const sc=document.createElement('script');sc.src=PPTX_SRC;sc.onload=()=>window.PptxGenJS?ok():no(new Error('PptxGenJS missing'));sc.onerror=()=>{pptxLoad=null;no(new Error('load failed'))};document.head.appendChild(sc)}))}
 function ppIn(j){const p=j.proposal||{};const d=(window.ST_PROPOSAL&&ST_PROPOSAL.DEFAULTS)||{};
-  return{phase:j.phase||'1',mode:p.mode||'bill',bill:p.bill??'',units:p.units??'',tariff:p.tariff??d.tariff,dayPct:p.dayPct??d.dayPct,maxKwp:p.maxKwp??'',meter:p.meter==='tou'?'tou':'normal',onUnits:p.onUnits??'',offUnits:p.offUnits??'',touOn:p.touOn??d.touOn,touOff:p.touOff??d.touOff,toTou:p.toTou==='yes'?'yes':'no',touMeterCost:p.touMeterCost??d.touMeterCost,sell:p.sell==='yes'?'yes':'no',sellRate:p.sellRate??d.sellRate,brands:Array.isArray(p.brands)&&p.brands.length?p.brands:[p.brand||d.brand||'GoodWe'],off:Array.isArray(p.off)?p.off:[],backupW:p.backupW??d.backupW,yield:p.yield??d.yield,rec:p.rec||''}}
+  return{phase:j.phase||'1',mode:p.mode||'bill',bill:p.bill??'',units:p.units??'',tariff:p.tariff??d.tariff,dayPct:p.dayPct??d.dayPct,maxKwp:p.maxKwp??'',degradation:p.degradation??+((d.degradation||0)*100).toFixed(2),tariffInflation:p.tariffInflation??+((d.tariffInflation||0)*100).toFixed(2),warrantyYears:p.warrantyYears??d.warrantyYears,omAfter:p.omAfter??d.omAfter,meter:p.meter==='tou'?'tou':'normal',onUnits:p.onUnits??'',offUnits:p.offUnits??'',touOn:p.touOn??d.touOn,touOff:p.touOff??d.touOff,toTou:p.toTou==='yes'?'yes':'no',touMeterCost:p.touMeterCost??d.touMeterCost,sell:p.sell==='yes'?'yes':'no',sellRate:p.sellRate??d.sellRate,brands:Array.isArray(p.brands)&&p.brands.length?p.brands:[p.brand||d.brand||'GoodWe'],off:Array.isArray(p.off)?p.off:[],backupW:p.backupW??d.backupW,yield:p.yield??d.yield,rec:p.rec||'',size:(p.size&&typeof p.size==='object')?p.size:{},price:(p.price&&typeof p.price==='object')?p.price:{}}}
 function proposalTab(j,dis){
   if(!window.ST_PROPOSAL)return `<div class="banner soft"><span>โหลดส่วน Proposal ไม่สำเร็จ ลองรีเฟรชหน้าเว็บ</span></div>`;
   const p=ppIn(j);const D=ST_PROPOSAL.calc(p);
@@ -862,28 +886,57 @@ function proposalTab(j,dis){
     ${fld('pp-touOff','ค่าไฟ Off-peak (บาท/หน่วย)',num('touOff','0.01'),'รวม Ft และ VAT ตรวจกับบิลจริง')}
     ${p.meter!=='tou'?fld('pp-touMeterCost','ค่าเปลี่ยนมิเตอร์ TOU (บาท)',num('touMeterCost','100','0'),'รวมในราคาระบบ ถ้าไม่มีใส่ 0'):''}`:''}
     ${fld('pp-dayPct','ใช้ไฟกลางวัน (%)',num('dayPct','1'),`กลางคืน ${Math.max(0,100-(+p.dayPct||0))}%`)}
-    ${fld('pp-maxKwp','พื้นที่ติดตั้งได้ประมาณ (kWp)',num('maxKwp','0.01','จากการสำรวจหน้างาน'),'Option ที่ต้องใช้ขนาดเกินนี้จะถูกตัดออก')}
+    ${fld('pp-maxKwp','พื้นที่ติดตั้งได้ประมาณ (kWp)',num('maxKwp','0.01','จากการสำรวจหน้างาน'),'Option ที่เกินนี้จะไม่ใส่ในไฟล์ จนกว่าจะลดจำนวนแผงลง')}
     ${fld('pp-sell','ขายไฟคืนการไฟฟ้า',`<select class="in" id="pp-sell" data-pp="sell" ${dis}>${opt([['no','ไม่ขายไฟ'],['yes','ขายไฟคืน']],p.sell)}</select>`)}
     ${p.sell==='yes'?fld('pp-sellRate','ราคารับซื้อไฟ (บาท/หน่วย)',num('sellRate','0.01'),'ไฟส่วนที่ใช้ไม่หมดขายคืนการไฟฟ้า'):''}
     ${fld('pp-backupW','โหลดในตู้ Backup (W)',num('backupW','10'),'ใช้คำนวณชั่วโมงไฟสำรองตอนไฟดับ')}
     ${fld('pp-yield','ผลิตไฟ (หน่วย/kWp/วัน)',num('yield','0.1'))}
+    ${fld('pp-degradation','แผงเสื่อม (% ต่อปี)',num('degradation','0.1'),'ใช้คำนวณจุดคืนทุนและเงินสะสม 25 ปี')}
+    ${fld('pp-tariffInflation','ค่าไฟขึ้น (% ต่อปี)',num('tariffInflation','0.1'),'Tariff inflation · ใส่ 0 ถ้าไม่คิด')}
+    ${fld('pp-warrantyYears','ประกันสินค้าแผง (ปี)',num('warrantyYears','1'),'แสดงในไฟล์ว่าหลังปีนี้หมดประกัน')}
+    ${fld('pp-omAfter','ค่าดูแลหลังหมดประกัน (บาท/ปี)',num('omAfter','100','0'),'หักจากเงินที่ประหยัดทุกปีหลังหมดประกันแผง ใส่ 0 ถ้าไม่คิด')}
   </div>`;
   if(!D.ok&&!(D.all&&D.all.length))return form+`<div class="banner soft"><span>${esc(D.why)} เพื่อคำนวณ Option</span></div>`;
   const notes=[];
   if(!D.maxKwp)notes.push('ยังไม่ได้กรอกพื้นที่ติดตั้ง ระบบจะเสนอทุก Option');
   if(D.billTouOnly!=null)notes.push(`ค่าไฟปัจจุบัน ฿${fmt(D.bill)}/เดือน · ถ้าเปลี่ยนเป็น TOU โดยยังไม่ติดโซลาร์ จะเป็นราว ฿${fmt(D.billTouOnly)}/เดือน · ยอดประหยัดด้านล่างคิดค่าไฟหลังติดตั้งด้วยมิเตอร์ TOU แล้ว`);
-  if(D.dropped.length&&!D.opts[0].sizedToRoof)notes.push('ตัดออกเพราะเกินพื้นที่: '+D.dropped.map(x=>`${x.name} ${fk2(x.kwp)} kWp`).join(', '));
-  if(D.opts[0].sizedToRoof)notes.push(`ทุก Option เกินพื้นที่ จึงเสนอ On-Grid ขนาดเต็มพื้นที่ ${fk2(D.opts[0].kwp)} kWp`);
+  if(D.dropped.length&&!(D.opts[0]||{}).sizedToRoof)notes.push('เกินพื้นที่ติดตั้ง จึงไม่ใส่ในไฟล์: '+D.dropped.map(x=>`${x.name} ${fk2(x.kwp)} kWp`).join(', ')+' · ลดจำนวนแผงในตารางให้ไม่เกินพื้นที่เพื่อนำกลับมาเสนอได้');
+  (D.overRoof||[]).forEach(x=>notes.push(`${x.name}: ขนาดที่ปรับเอง ${fk2(x.kwp)} kWp เกินพื้นที่ติดตั้ง ${fk2(D.maxKwp)} kWp ตรวจสอบหน้างานอีกครั้ง`));
+  if((D.opts[0]||{}).sizedToRoof)notes.push(`ทุก Option เกินพื้นที่ จึงเสนอ On-Grid ขนาดเต็มพื้นที่ ${fk2(D.opts[0].kwp)} kWp`);
   D.capped.forEach(c=>notes.push(`${c.name}: ${c.brand} มีอินเวอร์เตอร์ ${D.phase} เฟสใหญ่สุด ${c.inv} kW ใส่แผงได้ไม่เกิน ${fk2(c.kwp)} kWp (${ST_PROPOSAL.DEFAULTS.dcAcMax} เท่า)`));
   const canQ=can('quote.view');
-  const rows=D.all.map(o=>`<tr class="${o.on?'':'opt-off'}"><td><label class="chk" title="ใส่ Option นี้ในไฟล์ PowerPoint"><input type="checkbox" data-ppoff="${esc(o.key)}" ${o.on?'checked':''} ${dis} aria-label="เสนอ ${esc(o.name)} ในไฟล์"></label></td><td><b>${esc(o.name)}</b></td><td class="num">${fk2(o.kwp)} kWp<br><small class="muted">${o.pan} แผง</small></td><td class="num">${o.inv} kW${o.dcac>1?`<br><small class="muted">แผง ${o.dcac} เท่า</small>`:''}</td><td class="num">${o.hyb?fmt1(o.batt)+' kWh':'–'}</td><td class="r num">฿${fmt(o.save)}<br><small class="muted">${o.sellMo?`ขายไฟ ฿${fmt(o.sellMo)}`:o.pct+'%'}</small></td><td class="r num">฿${fmt(o.cost)}</td><td class="r num">${o.payback} ปี</td><td>${canQ&&JW()&&!dis?`<button class="btn sm" data-useopt="${esc(o.key)}">ใช้ในใบเสนอราคา</button>`:''}</td></tr>`).join('');
+  const chosen=ppPick(j);
+  const sizeCell=o=>`<div class="ppcell"><input class="in num" type="number" min="1" step="1" id="pp-size-${esc(o.key)}" data-ppsize="${esc(o.key)}" value="${o.customSize?o.pan:''}" placeholder="${o.pan}" aria-label="จำนวนแผง ${esc(o.name)}" ${dis}><span>แผง</span></div>
+    <small class="${o.customSize?'pp-own':'muted'}">${fk2(o.kwp)} kWp${o.customSize?' · ปรับเอง':''}</small>${o.customSize||o.over?`<br><small class="muted">แนะนำ ${o.recPan} แผง · ${fk2(o.recKwp)} kWp</small>`:''}${o.over?'<br><span class="tag warn">เกินพื้นที่</span>':''}${o.customSize&&!dis?`<br><button class="linkbtn" data-act="ppreset" data-k="size" data-key="${esc(o.key)}">ใช้ขนาดแนะนำ</button>`:''}`;
+  const priceCell=o=>`<div class="ppcell"><span>฿</span><input class="in num" type="number" min="0" step="100" id="pp-price-${esc(o.key)}" data-ppprice="${esc(o.key)}" value="${o.customPrice?o.cost:''}" placeholder="${o.stdCost}" aria-label="ราคารวม VAT ${esc(o.name)}" ${dis}></div>
+    <small class="${o.customPrice?'pp-own':'muted'}">${o.customPrice?`ราคากรอกเอง · มาตรฐาน ฿${fmt(o.stdCost)}`:'ราคามาตรฐาน'}</small>${o.customPrice&&!dis?`<br><button class="linkbtn" data-act="ppreset" data-k="price" data-key="${esc(o.key)}">ใช้ราคามาตรฐาน</button>`:''}`;
+  const rows=D.all.map(o=>`<tr class="${o.on?'':'opt-off'}${o.over?' opt-over':''}"><td><label class="chk" title="${o.over?'เกินพื้นที่ติดตั้ง ลดจำนวนแผงก่อน':'ใส่ Option นี้ในไฟล์ PowerPoint'}"><input type="checkbox" data-ppoff="${esc(o.key)}" ${o.on?'checked':''} ${o.over?'disabled':dis} aria-label="เสนอ ${esc(o.name)} ในไฟล์"></label></td><td><b>${esc(o.name)}</b>${chosen&&chosen.o.key===o.key?'<br><span class="tag" style="background:var(--good-soft);color:var(--good)">อยู่ในใบเสนอราคา</span>':''}</td><td class="c-size">${sizeCell(o)}</td><td class="num">${o.inv} kW${o.dcac>1?`<br><small class="muted">แผง ${o.dcac} เท่า</small>`:''}</td><td class="num">${o.hyb?fmt1(o.batt)+' kWh':'–'}</td><td class="r num">฿${fmt(o.save)}<br><small class="muted">${o.sellMo?`ขายไฟ ฿${fmt(o.sellMo)}`:o.pct+'%'}</small></td><td class="c-price">${priceCell(o)}</td><td class="r num"><b>${o.payback?o.payback+' ปี':'> 25 ปี'}</b><br><small class="muted">แบบง่าย ${o.paybackSimple} ปี</small></td><td>${canQ&&JW()&&!dis&&!o.over?`<button class="btn sm" data-useopt="${esc(o.key)}">ใช้ในใบเสนอราคา</button>`:''}</td></tr>`).join('');
+  const shown=D.all.filter(o=>!o.over);
+  const pb=(()=>{if(!shown.length)return '';const sl=D.sell;const L=sl?['(1)','(2)','(3)','(4)','(5)','(6)']:['(1)','(2)','(3)','','(4)','(5)'];
+    const r=(lab,sub,f,cls)=>`<tr${cls?` class="${cls}"`:''}><th scope="row">${lab}${sub?` <small class="muted">${sub}</small>`:''}</th>${shown.map(o=>`<td class="r num">${f(o)}</td>`).join('')}</tr>`;
+    return `<details class="pb" open><summary>วิธีคิดระยะเวลาคืนทุน</summary>
+    <div class="pbf"><b>คืนทุน = ปีที่เงินประหยัดสะสมเกินราคาระบบรวม VAT</b><span>เริ่มจากประหยัดปีแรก = ประหยัดต่อเดือน × 12${sl?' (รวมเงินขายไฟคืน)':''} แล้วทุกปีถัดไป แผงเสื่อม ${fmt1(D.deg*100)}%/ปี ค่าไฟขึ้น ${fmt1(D.infl*100)}%/ปี${D.omAfter?` · หลังปีที่ ${D.wYears} หมดประกันแผง หักค่าดูแล ฿${fmt(D.omAfter)}/ปี`:` · ปีที่ 1–${D.wYears} อยู่ในประกันสินค้าแผง`}</span></div>
+    <div class="tbl-wrap"><table class="qt pbt"><thead><tr><th></th>${shown.map(o=>`<th class="r">${esc(o.name)}<br><small class="muted">${fk2(o.kwp)} kWp</small></th>`).join('')}</tr></thead><tbody>
+      ${r(`${L[0]} ค่าไฟก่อนติดตั้ง/เดือน`,'',()=>`฿${fmt(D.billNow)}`)}
+      ${r(`${L[1]} ค่าไฟหลังติดตั้ง/เดือน`,'ส่วนที่ยังซื้อจากการไฟฟ้า',o=>`฿${fmt(D.billNow-o.saveBill)}`)}
+      ${r(`${L[2]} ประหยัดค่าไฟ/เดือน`,`= ${L[0]} − ${L[1]}`,o=>`฿${fmt(o.saveBill)}<br><small class="muted">ใช้ไฟโซลาร์ ${fmt(o.selfMo+o.battMo)} หน่วย${o.battMo?` (จากแบต ${fmt(o.battMo)})`:''}</small>`)}
+      ${sl?r(`${L[3]} ขายไฟคืน/เดือน`,`= หน่วยที่เหลือ × ${D.sellRate} บาท`,o=>`฿${fmt(o.sellMo)}<br><small class="muted">${fmt(o.exportMo)} หน่วย</small>`):''}
+      ${r(`${L[4]} ประหยัดปีแรก`,sl?`= (${L[2]} + ${L[3]}) × 12`:`= ${L[2]} × 12`,o=>`฿${fmt(o.save)} × 12<br><b>= ฿${fmt(o.saveYr)}</b>`)}
+      ${r(`${L[5]} ราคาระบบรวม VAT`,'',o=>`฿${fmt(o.cost)}${o.customPrice?'<br><small class="pp-own">ราคากรอกเอง</small>':''}`)}
+      ${r('คืนทุนแบบง่าย',`= ${L[5]} ÷ ${L[4]}`,o=>`<small class="muted">${fmt(o.cost)} ÷ ${fmt(o.saveYr)}</small><br>${o.saveYr>0?`= ${o.paybackSimple} ปี`:'–'}`)}
+      ${r('คืนทุน',`คิดแผงเสื่อม ${fmt1(D.deg*100)}% ค่าไฟขึ้น ${fmt1(D.infl*100)}%/ปี`,o=>`<b>${o.payback?`${o.payback} ปี`:'เกิน 25 ปี'}</b><br><small class="muted">ประหยัดสุทธิ 25 ปี ฿${fmt(o.y25)}</small>`,'pb-res')}
+    </tbody></table></div>
+    <span class="note">ค่าไฟหลังติดตั้งคำนวณรายชั่วโมง: ไฟโซลาร์ใช้ในบ้านก่อน${shown.some(o=>o.hyb)?' ส่วนเกินชาร์จแบตเตอรี่ไว้ใช้ตอนกลางคืน':''} ส่วนที่ไม่พอซื้อจากการไฟฟ้า${D.tou||D.toTou?' ตามค่าไฟ On-peak / Off-peak':` ที่ ${fk2(D.T)} บาท/หน่วย`} · คืนทุนแบบง่ายใช้ประหยัดปีแรกคงที่ ส่วนคืนทุนจริงคิดแผงเสื่อมและค่าไฟขึ้นตามที่กรอกด้านบน · ตารางนี้อยู่ในไฟล์ PowerPoint ด้วย</span>
+    </details>`})();
   return `${form}
   <div class="stage-row"><span class="now">ใช้ไฟ ${fmt(D.kwh)} หน่วย/เดือน${p.mode==='units'||D.tou?` · ค่าไฟราว ฿${fmt(D.bill)}`:''}${D.tou?` (On-peak ${fmt(D.onU)} · Off-peak ${fmt(D.offU)})`:''}<small>กลางวัน ${fmt1(D.dD)} หน่วย/วัน · กลางคืน ${fmt1(D.nD)} หน่วย/คืน</small></span></div>
   ${notes.map(n=>`<div class="banner soft"><span>${esc(n)}</span></div>`).join('')}
-  <div class="tbl-wrap"><table class="qt"><thead><tr><th title="เสนอในไฟล์">ใส่ในไฟล์</th><th>Option</th><th>ขนาด</th><th>อินเวอร์เตอร์</th><th>แบตเตอรี่</th><th class="r">ประหยัด/เดือน</th><th class="r">ราคารวม VAT</th><th class="r">คืนทุน</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="tbl-wrap"><table class="qt"><thead><tr><th title="เสนอในไฟล์">ใส่ในไฟล์</th><th>Option</th><th>ขนาด (จำนวนแผง)</th><th>อินเวอร์เตอร์</th><th>แบตเตอรี่</th><th class="r">ประหยัด/เดือน</th><th>ราคารวม VAT</th><th class="r">คืนทุน</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <span class="note">ช่องจำนวนแผงและราคา: ว่างไว้ = ใช้ค่าที่ระบบแนะนำ (ตัวเลขสีจาง) · พิมพ์ตัวเลขเพื่อกำหนดเอง ระบบคำนวณการประหยัดและคืนทุนใหม่ให้</span>
+  ${pb}
   ${D.ok?'':`<div class="banner soft"><span>${esc(D.why)}</span></div>`}
   <div class="acts">${canDownload()?`<button class="btn pri" data-act="pptx" ${D.ok?'':'disabled'}>ดาวน์โหลด Proposal (.pptx)${D.ok?` · ${D.opts.length} Option`:''}</button>`:''}</div>
-  <span class="note">ไฟล์ PowerPoint แก้ไขได้ทุกหน้า มีกรอบให้คลิกใส่รูปหลังคา อุปกรณ์จริง และผลงานที่ผ่านมา · ราคาเป็นราคามาตรฐาน แก้ได้ในไฟล์ proposal.js</span>`;
+  <span class="note">ไฟล์ PowerPoint แก้ไขได้ทุกหน้า มีกรอบให้คลิกใส่รูปหลังคา อุปกรณ์จริง และผลงานที่ผ่านมา · ใช้จำนวนแผงและราคาตามตารางด้านบน</span>`;
 }
 async function proposalPptx(j,btn){const D=ST_PROPOSAL.calc(ppIn(j));if(!D.ok){toast(D.why);return}
   btn.disabled=true;const old=btn.textContent;btn.textContent='กำลังสร้างไฟล์…';
@@ -1033,7 +1086,7 @@ function quoteDoc(j,autoPrint){const t=quoteTotals(j);const e=estimate(j);const 
   <div class="meta"><div><b>ลูกค้า</b><br>${esc(j.name)}<br>${esc(j.addr)} ${esc(j.prov)}<br>โทร ${esc(j.phone)}${j.email?`<br>อีเมล ${esc(j.email)}`:''}</div><div><b>ระบบที่เสนอ</b><br>${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid + แบตเตอรี่':'On-Grid'}<br>มิเตอร์ ${j.phase==='3'?'3':'1'} เฟส · ${j.util==='MEA'?'การไฟฟ้านครหลวง':'การไฟฟ้าส่วนภูมิภาค'}<br>หลังคา ${esc(j.roof||'')}${pmName(j)?`<br>ผู้ดูแลโครงการ ${esc(pmName(j))}`:''}</div></div>
   <table><thead><tr><th>#</th><th>รายการ</th><th class="r">จำนวน</th><th>หน่วย</th><th class="r">ราคา/หน่วย</th><th class="r">จำนวนเงิน</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="tot"><div><span>รวมเป็นเงิน</span><span>${fmt(t.sub)}</span></div>${t.disc?`<div><span>ส่วนลด</span><span>-${fmt(t.disc)}</span></div>`:''}<div><span>ภาษีมูลค่าเพิ่ม 7%</span><span>${fmt(t.vat)}</span></div><div class="g"><span>รวมทั้งสิ้น</span><span>${fmt(t.total)} บาท</span></div></div>
-  <div class="note"><b>ประมาณการ:</b> ผลิตไฟราว ${fmt(e.month)} หน่วย/เดือน ประหยัดค่าไฟราว ${fmt(e.monthSave)} บาท/เดือน คืนทุนประมาณ ${e.payback?e.payback.toFixed(1):'–'} ปี (ค่าไฟ ${e.tariff} บาท/หน่วย)<br>
+  <div class="note"><b>ประมาณการ:</b> ผลิตไฟราว ${fmt(e.month)} หน่วย/เดือน ประหยัดค่าไฟราว ${fmt(e.monthSave)} บาท/เดือน ${e.payback?`คืนทุนประมาณ ${e.payback.toFixed(1)} ปี `:''}(ค่าไฟ ${e.tariff} บาท/หน่วย)<br>
   <b>เงื่อนไข:</b> ราคารวมการออกแบบ วิศวกรรับรอง และดำเนินการขออนุญาตท้องถิ่น แจ้ง กกพ. และยื่นขนานไฟกับการไฟฟ้า · ชำระมัดจำ 50% เมื่ออนุมัติ 40% เมื่อติดตั้งเสร็จ 10% เมื่อการไฟฟ้าเปลี่ยนมิเตอร์ · ใบเสนอราคามีอายุ 30 วัน</div>
   <div class="sign"><div>ผู้เสนอราคา</div><div>ลูกค้าผู้อนุมัติ</div></div>${autoPrint?'<script>window.onload=()=>setTimeout(()=>window.print(),500)<\/script>':''}</body></html>`}
 function quoteText(j){const t=quoteTotals(j);const e=estimate(j);return `ใบเสนอราคา SOLARTOUCH ${j.code}
@@ -1041,7 +1094,7 @@ function quoteText(j){const t=quoteTotals(j);const e=estimate(j);return `ใบ�
 ระบบ: ${fmt1(j.kw)} kWp ${j.type==='hybrid'?'Hybrid':'On-Grid'} ${j.phase==='3'?'3':'1'} เฟส
 ${(j.quote?.items||[]).map((it,k)=>`${k+1}. ${it.d} × ${fmt1(it.q)} ${it.u} = ${fmt((+it.q||0)*(+it.p||0))}`).join('\n')}
 รวมทั้งสิ้น (รวม VAT 7%): ${fmt(t.total)} บาท
-ผลิตไฟราว ${fmt(e.month)} หน่วย/เดือน · ประหยัดราว ${fmt(e.monthSave)} บาท/เดือน · คืนทุนราว ${e.payback?e.payback.toFixed(1):'–'} ปี`}
+ผลิตไฟราว ${fmt(e.month)} หน่วย/เดือน · ประหยัดราว ${fmt(e.monthSave)} บาท/เดือน ${e.payback?` · คืนทุนราว ${e.payback.toFixed(1)} ปี`:''}`}
 const canDownload=()=>!!BK&&(BK.kind!=='artifact'||!!dl);
 async function saveFile(name,data,type){
   if(BK.kind==='artifact'){try{await dl.save({filename:name,data})}catch(e){if(!e||e.code!=='declined')toast('บันทึกไฟล์ไม่สำเร็จ')}return}
@@ -1084,10 +1137,13 @@ function addAppt(jobId,f){const j=S.jobs.get(jobId);if(!j||!f.date)return;const 
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy],[data-useopt]');if(!t)return;
+  const t=e.target.closest('[data-view],[data-act],[data-open],[data-stage],[data-tab],[data-filter],[data-stagejump],[data-rm],[data-rmmember],[data-cal],[data-day],[data-mapstage],[data-focus],[data-photo],[data-delphoto],[data-rmappt],[data-pmjump],[data-payf],[data-preview],[data-bpay],[data-bunpay],[data-rmins],[data-rmtier],[data-clrpay],[data-btab],[data-rmcrew],[data-cpay],[data-cunpay],[data-rmctier],[data-rmroster],[data-copy],[data-useopt],[data-hideteam],[data-unhideteam]');if(!t)return;
   if(t.matches('[data-copy]')){copy(t.dataset.copy,'คัดลอกอีเมลแล้ว');return}
+  if(t.dataset.hideteam){const id=t.dataset.hideteam;arm(t,'ยืนยัน? กดอีกครั้ง',()=>setHidden(id,true));return}
+  if(t.dataset.unhideteam){setHidden(t.dataset.unhideteam,false);return}
   if(t.matches('[data-useopt]')){const id=S.open,j=S.jobs.get(id);if(!j||!window.ST_PROPOSAL)return;const o=(ST_PROPOSAL.calc(ppIn(j)).all||[]).find(x=>x.key===t.dataset.useopt);if(!o)return;
-    const go=()=>saveJob(id,{kw:o.kwp,type:o.hyb?'hybrid':'ongrid',inv:o.inv,quote:{items:o.items.map(x=>({...x}))},proposal:{rec:o.name}},`ใช้ ${o.name} ${fk2(o.kwp)} kWp จาก Proposal ในใบเสนอราคา`).then(()=>{S.tab='quote';renderDrawer(true);toast('สร้างรายการใบเสนอราคาจาก Proposal แล้ว')});
+    const qItems=o.items.map(x=>({...x}));const qp={items:qItems};if(o.customPrice){if(o.adj>0)qItems.push({d:'ปรับราคาตามข้อเสนอ',q:1,u:'งาน',p:o.adj});qp.discount=o.adj<0?+(-o.adj).toFixed(2):0}
+    const go=()=>saveJob(id,{kw:o.kwp,type:o.hyb?'hybrid':'ongrid',inv:o.inv,quote:qp,proposal:{rec:o.name,recKey:o.key}},`ใช้ ${o.name} ${fk2(o.kwp)} kWp จาก Proposal ในใบเสนอราคา`).then(()=>{S.tab='quote';renderDrawer(true);toast('สร้างรายการใบเสนอราคาจาก Proposal แล้ว')});
     (j.quote?.items||[]).length?arm(t,'แทนที่รายการเดิม? กดอีกครั้ง',go):go();return}
   if(t.matches('[data-btab]')){S.bTab=t.dataset.btab;renderView();return}
   if(t.matches('[data-rmcrew]')){const j=S.jobs.get(S.open);const c=[...(j.crew||[])];c.splice(+t.dataset.rmcrew,1);saveCrew(S.open,c);return}
@@ -1141,6 +1197,7 @@ document.addEventListener('click',e=>{
   else if(a==='gen'){const go=()=>saveJob(S.open,{quote:{items:buildItems(j)}},'สร้างรายการใบเสนอราคาใหม่จากขนาดระบบ');(j.quote?.items||[]).length?arm(t,'แทนที่รายการเดิม? กดอีกครั้ง',go):go()}
   else if(a==='printquote')printQuote(j);
   else if(a==='pptx')proposalPptx({id:S.open,...j},t);
+  else if(a==='ppreset'){if(!j)return;const k=t.dataset.k==='price'?'price':'size';const key=t.dataset.key;const o=window.ST_PROPOSAL&&(ST_PROPOSAL.calc(ppIn(j)).all||[]).find(x=>x.key===key);saveJob(S.open,{proposal:{[k]:{[key]:''}}},`${o?o.name:key}: กลับไปใช้${k==='size'?'ขนาดแนะนำ':'ราคามาตรฐาน'}`)}
   else if(a==='savequote')saveFile(`ใบเสนอราคา-${j.code}.html`,quoteDoc(j,false),'text/html');
   else if(a==='copyquote')copy(quoteText(j),'คัดลอกแล้ว วางในไลน์หรืออีเมลได้เลย');
   else if(a==='bonusxlsx')bonusXlsx(t);
@@ -1192,6 +1249,9 @@ $('#drawer').addEventListener('change',e=>{const el=e.target;const id=S.open;con
     else{saveJob(id,{mapUrl:/^https?:/.test(v)?v:''},'บันทึกลิงก์ Google Maps');toast('อ่านพิกัดจากลิงก์นี้ไม่ได้ (ลิงก์ย่อ) ปุ่มเปิดใน Google Maps ยังใช้ได้ ถ้าจะแสดงบนแผนที่ให้วางตัวเลขพิกัดแทน')}}
   else if(el.dataset.ppbrand){const cur=ppIn(j).brands;const b=el.dataset.ppbrand;const next=el.checked?[...new Set([...cur,b])]:cur.filter(x=>x!==b);if(!next.length){el.checked=true;toast('เลือกอย่างน้อย 1 ยี่ห้อ');return}saveJob(id,{proposal:{brands:next}})}
   else if(el.dataset.ppoff){const cur=ppIn(j).off;const k=el.dataset.ppoff;const next=el.checked?cur.filter(x=>x!==k):[...new Set([...cur,k])];saveJob(id,{proposal:{off:next}})}
+  else if(el.dataset.ppsize||el.dataset.ppprice){const isS=!!el.dataset.ppsize;const key=isS?el.dataset.ppsize:el.dataset.ppprice;const v=el.value===''?'':isS?Math.max(1,Math.round(+el.value||0)):Math.max(0,Math.round(+el.value||0));const cur=((j.proposal||{})[isS?'size':'price']||{})[key];if((cur??'')===v)return;
+    const o=window.ST_PROPOSAL&&(ST_PROPOSAL.calc(ppIn(j)).all||[]).find(x=>x.key===key);
+    saveJob(id,{proposal:{[isS?'size':'price']:{[key]:v===0?'':v}}},v===''||v===0?`${o?o.name:key}: กลับไปใช้${isS?'ขนาดแนะนำ':'ราคามาตรฐาน'}`:`${o?o.name:key}: ${isS?`ปรับขนาดเป็น ${v} แผง`:`กรอกราคา ฿${fmt(v)}`}`)}
   else if(el.dataset.pp){const k=el.dataset.pp;const v=(k==='mode'||k==='rec'||k==='brand'||k==='sell'||k==='meter'||k==='toTou')?el.value:(el.value===''?'':Math.max(0,+el.value||0));if((j.proposal||{})[k]===v)return;saveJob(id,{proposal:{[k]:v}})}
   else if(el.dataset.q){const k=el.dataset.q;let v=el.value;if(k!=='status')v=+v||0;const SL={draft:'ร่าง',sent:'ส่งลูกค้าแล้ว',approved:'ลูกค้าอนุมัติ',rejected:'ไม่ผ่าน'};saveJob(id,{quote:{[k]:v}},k==='status'?`ใบเสนอราคา: ${SL[v]}`:null)}
   else if(el.dataset.i!=null){const items=(j.quote?.items||[]).map(x=>({...x}));const it=items[+el.dataset.i];if(!it)return;it[el.dataset.k]=(el.dataset.k==='q'||el.dataset.k==='p')?(+el.value||0):el.value;saveJob(id,{quote:{items}})}

@@ -17,7 +17,11 @@
     batteries: [{ kwh: 5, price: 55000 }, { kwh: 16.1, price: 150000 }],
     battDod: 0.9, battEff: 0.92,
     mountPerPanel: 950, protection: 9500, cables: 7500, laborPerKwp: 2500, engineering: 12000,
-    hybridInvFactor: 1.35, vat: 0.07, degradation: 0.005,
+    hybridInvFactor: 1.35, vat: 0.07,
+    degradation: 0.005,   // แผงเสื่อมต่อปี (0.005 = 0.5%)
+    tariffInflation: 0.02, // ค่าไฟขึ้นต่อปี (0.02 = 2%)
+    warrantyYears: 12,    // ประกันสินค้าแผง (ปี)
+    omAfter: 0,           // ค่าดูแล/ซ่อมบำรุงต่อปี หลังหมดประกันแผง (บาท)
     brand: 'GoodWe',      // ยี่ห้ออินเวอร์เตอร์เริ่มต้น (เลือกได้หลายยี่ห้อในหน้า Proposal เพื่อเทียบราคา)
     // ราคาอินเวอร์เตอร์แยกยี่ห้อ (บาท) ขนาดที่ไม่ได้ใส่ไว้จะใช้ราคามาตรฐานตามขนาด
     invPrices: { // แยกตามมิเตอร์ 1 เฟส / 3 เฟส
@@ -56,7 +60,7 @@
 
   /* ---------- calculation ---------- */
   // input: {phase, meter:'normal'|'tou', mode:'bill'|'units', bill, units, tariff, onUnits, offUnits, touOn, touOff, toTou, touMeterCost,
-  //         dayPct, maxKwp, backupW, yield, sell, sellRate, brands:[...], off:[option keys]}
+  //         dayPct, maxKwp, backupW, yield, sell, sellRate, degradation(%), tariffInflation(%), warrantyYears, omAfter, brands:[...], off:[option keys]}
   function calc(input, over) {
     const P = Object.assign({}, DEFAULTS, over || {});
     const i = input || {};
@@ -68,6 +72,10 @@
     const phase = String(i.phase) === '3' ? 3 : 1;
     const maxKwp = +i.maxKwp > 0 ? +i.maxKwp : null;
     const sell = !!i.sell && i.sell !== 'no', sellRate = sell ? (+i.sellRate > 0 ? +i.sellRate : P.sellRate) : 0;
+    const pct = (v, d) => (v === '' || v == null || isNaN(+v) ? d : Math.max(0, +v) / 100);
+    const deg = pct(i.degradation, P.degradation), infl = pct(i.tariffInflation, P.tariffInflation);
+    const wYears = +i.warrantyYears > 0 ? Math.round(+i.warrantyYears) : P.warrantyYears;
+    const omAfter = i.omAfter === '' || i.omAfter == null ? P.omAfter : Math.max(0, +i.omAfter || 0);
     const tou = i.meter === 'tou';
     const rOn = +i.touOn > 0 ? +i.touOn : P.touOn, rOff = +i.touOff > 0 ? +i.touOff : P.touOff;
     const onU = tou ? Math.max(0, +i.onUnits || 0) : 0, offU = tou ? Math.max(0, +i.offUnits || 0) : 0;
@@ -76,7 +84,7 @@
     // หลังติดตั้ง: มิเตอร์ TOU (มีอยู่แล้ว หรือเปลี่ยนใหม่) หรือมิเตอร์ปกติเหมือนเดิม
     const toTou = tou || i.toTou === 'yes';
     const meterCost = !tou && toTou ? Math.max(0, +(i.touMeterCost ?? P.touMeterCost) || 0) : 0;
-    const D = { T: kwh > 0 ? bill / kwh : T, Y, W, day, phase, kwh, bill, backupW, maxKwp, sell, sellRate, tou, toTou, rOn, rOff, onU, offU, meterCost, opts: [], dropped: [], P };
+    const D = { deg, infl, wYears, omAfter, T: kwh > 0 ? bill / kwh : T, Y, W, day, phase, kwh, bill, backupW, maxKwp, sell, sellRate, tou, toTou, rOn, rOff, onU, offU, meterCost, opts: [], dropped: [], P };
     if (!(kwh > 0)) return Object.assign(D, { ok: false, why: tou ? 'กรอกจำนวนหน่วย On-peak และ Off-peak ต่อเดือน' : 'กรอกค่าไฟหรือจำนวนหน่วยต่อเดือน' });
     const known = Object.keys(P.inverters1);
     let brands = (Array.isArray(i.brands) ? i.brands : i.brand ? [i.brand] : []).filter(b => known.includes(b));
@@ -118,6 +126,7 @@
     D.day = D.dD / (D.dD + D.nD);
     const billNow = DT.reduce((a, t) => a + t.n * t.load.reduce((b, l, h) => b + l * rateNow(h, t.wk), 0), 0);
     // ค่าไฟถ้าเปลี่ยนเป็น TOU แต่ยังไม่ติดโซลาร์ (แยกผลจากการเปลี่ยนมิเตอร์)
+    D.billNow = Math.round(billNow);
     D.billTouOnly = !tou && toTou ? DT.reduce((a, t) => a + t.n * t.load.reduce((b, l, h) => b + l * rateAfter(h, t.wk), 0), 0) : null;
     // จำลองหนึ่งวัน เริ่ม 06:00 แบตว่าง: ใช้ไฟจากแผงก่อน ส่วนเกินชาร์จแบต แล้วจ่ายจากแบตเมื่อแผงไม่พอ
     const simulate = (prod, cap) => {
@@ -138,11 +147,15 @@
       return { after, exp, dis, self };
     };
 
-    const build = (name, hyb, bi, forcePan, brand) => {
+    // ปรับเองต่อ Option: จำนวนแผง (size) และราคารวม VAT (price) แยกตาม key เช่น 'hybrid|GoodWe'
+    const SZ = i.size && typeof i.size === 'object' ? i.size : {}, PR = i.price && typeof i.price === 'object' ? i.price : {};
+    const build = (name, hyb, bi, forcePan, brand, key) => {
       const B = hyb ? P.batteries[bi] : null, bk = B ? B.kwh : 0, nb = B ? 1 : 0;
       const us = bk * P.battDod;
       const need = hyb ? (D.dD + Math.min(us, D.nD) / P.battEff) / Y : D.dD / Y;
-      let pan = forcePan || Math.max(1, Math.ceil(need * 1000 / W - 1e-9));
+      const recPan = Math.max(1, Math.ceil(need * 1000 / W - 1e-9));
+      const userPan = key && Math.round(+SZ[key]) > 0 ? Math.round(+SZ[key]) : 0;
+      let pan = userPan || forcePan || recPan;
       const capped = pan > panCapOf(hyb, brand);
       pan = Math.min(pan, panCapOf(hyb, brand));
       const kwp = pan * W / 1000;
@@ -167,13 +180,27 @@
         { d: 'ค่าแรงติดตั้ง ทดสอบ และเดินระบบ', q: +kwp.toFixed(2), u: 'kWp', p: P.laborPerKwp },
         { d: 'ออกแบบ วิศวกรรับรอง และดำเนินการขออนุญาตขนานไฟ', q: 1, u: 'งาน', p: P.engineering }
       ];
-      const ex = items.reduce((a, it) => a + it.q * it.p, 0), cost = ex * (1 + P.vat);
-      const cum = []; let c = -cost;
-      for (let y = 0; y <= 25; y++) { cum.push(Math.round(c)); c += save * 12 * Math.pow(1 - P.degradation, y); }
+      const exStd = items.reduce((a, it) => a + it.q * it.p, 0), costStd = exStd * (1 + P.vat);
+      // ราคาที่กรอกเอง (รวม VAT) ใช้แทนราคามาตรฐาน
+      const userCost = key && +PR[key] > 0 ? +PR[key] : 0;
+      const cost = userCost || costStd, ex = cost / (1 + P.vat);
+      // เงินสะสม 25 ปี: แผงเสื่อมทุกปี ค่าไฟขึ้นทุกปี (ราคารับซื้อไฟคงที่) และค่าดูแลหลังหมดประกันแผง
+      const cum = [Math.round(-cost)]; let c = -cost, payback = 0;
+      for (let y = 1; y <= 25; y++) {
+        const f = Math.pow(1 - deg, y - 1);
+        const yr = (saveBill * Math.pow(1 + infl, y - 1) + sellMo) * 12 * f - (y > wYears ? omAfter : 0);
+        if (!payback && c < 0 && c + yr >= 0 && yr > 0) payback = y - 1 + (-c) / yr;
+        c += yr; cum.push(Math.round(c));
+      }
+      const saveR = Math.round(save), costR = Math.round(cost);
       return {
         name, hyb, nb, need: +need.toFixed(2), batt: bk, pan, kwp: +kwp.toFixed(2), inv: ik, brand, capped, dcac: +(kwp / ik).toFixed(2),
-        prodMo: Math.round(prod * 30), prodYr: Math.round(prod * 365), save: Math.round(save), saveBill: Math.round(saveBill), sellMo: Math.round(sellMo), exportMo: Math.round(exportD * 30), pct: Math.round(saveBill / bill * 100),
-        ex: Math.round(ex), cost: Math.round(cost), payback: save > 0 ? +(cost / (save * 12)).toFixed(1) : 0,
+        recPan, recKwp: +(recPan * W / 1000).toFixed(2), customSize: !!userPan, customPrice: !!userCost,
+        stdCost: Math.round(costStd), adj: +(ex - exStd).toFixed(2),
+        prodMo: Math.round(prod * 30), prodYr: Math.round(prod * 365), save: saveR, saveBill: Math.round(saveBill), sellMo: Math.round(sellMo), exportMo: Math.round(exportD * 30), pct: Math.round(saveBill / bill * 100),
+        billAfter: Math.round(billNow) - Math.round(saveBill), selfMo: Math.round(sim.self), battMo: Math.round(sim.dis), saveYr: saveR * 12,
+        // payback = ปีที่เงินประหยัดสะสมเกินราคาระบบ (คิดแผงเสื่อม ค่าไฟขึ้น ค่าดูแล) · paybackSimple = ราคา ÷ ประหยัดปีแรก
+        ex: Math.round(ex), cost: costR, payback: payback ? +payback.toFixed(1) : 0, paybackSimple: saveR > 0 ? +(costR / (saveR * 12)).toFixed(1) : 0, yW: cum[Math.min(25, wYears)],
         night: hyb && D.nD ? Math.min(100, Math.round(st / D.nD * 100)) : 0, y25: Math.round(cum[25]),
         backupH: hyb ? +(us / (backupW / 1000)).toFixed(1) : 0, cum, items
       };
@@ -182,14 +209,20 @@
     let all = [];
     brands.forEach(brand => {
       const label = n => (multi ? `${n} ${brand}` : n);
-      let list = OPT_DEFS.map(([n, h, b, t]) => Object.assign(build(label(n), h, b, null, brand), { base: n, key: t + '|' + brand }));
-      // ตัดทางเลือกที่ต้องใช้ขนาดเกินพื้นที่ติดตั้งได้
+      let list = OPT_DEFS.map(([n, h, b, t]) => Object.assign(build(label(n), h, b, null, brand, t + '|' + brand), { base: n, key: t + '|' + brand }));
+      // ทางเลือกที่เกินพื้นที่ติดตั้ง: ยังแสดงในตาราง (ไม่ใส่ในไฟล์) เพื่อให้ลดขนาดเองแล้วนำกลับมาเสนอได้
+      // ขนาดที่ผู้ใช้กรอกเองจะไม่ถูกตัด แต่มีคำเตือน
       if (maxKwp) {
-        list.forEach(o => { if (o.kwp > maxKwp + 1e-9) D.dropped.push({ name: o.name, kwp: o.kwp, why: 'เกินพื้นที่ติดตั้ง' }); });
-        list = list.filter(o => o.kwp <= maxKwp + 1e-9);
-        if (!list.length) { // ไม่มีทางเลือกไหนพอดี: เสนอ On-Grid ขนาดเต็มพื้นที่
+        list.forEach(o => {
+          if (o.kwp <= maxKwp + 1e-9) return;
+          if (o.customSize) o.overRoof = true;
+          else { o.over = true; D.dropped.push({ name: o.name, kwp: o.kwp, why: 'เกินพื้นที่ติดตั้ง' }); }
+        });
+        if (!list.some(o => !o.over)) { // ไม่มีทางเลือกไหนพอดี: เสนอ On-Grid ขนาดเต็มพื้นที่
           const pan = Math.max(1, Math.floor(maxKwp * 1000 / W + 1e-9));
-          list = [Object.assign(build(label('On-Grid'), false, 0, pan, brand), { base: 'On-Grid', key: 'ongrid|' + brand, sizedToRoof: true })];
+          const og = Object.assign(build(label('On-Grid'), false, 0, pan, brand, 'ongrid|' + brand), { base: 'On-Grid', key: 'ongrid|' + brand, sizedToRoof: true });
+          og.recPan = pan; og.recKwp = +(pan * W / 1000).toFixed(2);
+          list = [og, ...list.filter(o => o.key !== og.key)];
         }
       }
       // ไม่เสนอทางเลือกที่ขนาดซ้ำกัน (เช่น ถูกจำกัดด้วยขนาดอินเวอร์เตอร์)
@@ -200,7 +233,8 @@
     const TORD = { ongrid: 0, hybrid: 1, hybrid2: 2 };
     all.sort((a, b) => TORD[a.key.split('|')[0]] - TORD[b.key.split('|')[0]] || brands.indexOf(a.brand) - brands.indexOf(b.brand));
     const off = new Set(Array.isArray(i.off) ? i.off : []);
-    all.forEach(o => { o.on = !off.has(o.key); });
+    all.forEach(o => { o.on = !off.has(o.key) && !o.over; });
+    D.overRoof = all.filter(o => o.overRoof).map(o => ({ name: o.name, kwp: o.kwp }));
     D.all = all;
     D.opts = all.filter(o => o.on);
     D.capped = all.filter(o => o.capped).map(o => ({ name: o.name, brand: o.brand, inv: o.inv, kwp: o.kwp }));
@@ -486,11 +520,44 @@
           row('ขายไฟคืน/เดือน', o => `฿${fmt(o.sellMo)} (${fmt(o.exportMo)} หน่วย)`),
           row('รวมประโยชน์/เดือน', o => `฿${fmt(o.save)}`, true)] : [row('ประหยัด/เดือน', o => `฿${fmt(o.save)} (${o.pct}%)`, true)]),
         row('ราคารวม VAT', o => `฿${fmt(o.cost)}`, true),
-        row('คืนทุน', o => `${fmt1(o.payback)} ปี`, true)
+        row('คืนทุน', o => (o.payback ? `${fmt1(o.payback)} ปี` : 'เกิน 25 ปี'), true)
       ], { x: 0.5, y: 1.0, w: 9.0, colW: [many ? 1.5 : 2.1, ...OPTS.map(() => (many ? 7.5 : 6.9) / OPTS.length)], fontSize: many ? 9.5 : D.sell ? 11 : 12, color: HEX.ink, border: { type: 'solid', pt: 0.5, color: 'D9E1EF' }, rowH: [0.5, ...Array(D.sell ? 10 : 8).fill(D.sell ? 0.29 : 0.34)], objectName: 'Options comparison table' });
       s.addText(`* วงจรสำรอง ${fmt(D.backupW)} W (ตู้เย็น ไฟ Wi-Fi ปั๊มน้ำ) · ทุกระบบหยุดทำงานเมื่อไฟดับ ต้องทำระบบ Backup เพิ่ม (ยังไม่รวมในราคา)${D.sell ? ` · ขายไฟคืน ${D.sellRate} บาท/หน่วย` : ''}${D.toTou && !D.tou ? ` · คิดค่าไฟหลังติดตั้งด้วยมิเตอร์ TOU${D.meterCost ? ' รวมค่าเปลี่ยนมิเตอร์' : ''}` : ''}`,
         { x: 0.5, y: D.sell ? 4.75 : 4.55, w: 9.0, h: 0.5, fontSize: 10, color: C.accent5, margin: 0, isTextBox: true });
       s.addNotes('ตัวเลขคำนวณจากโปรแกรม SOLARTOUCH ราคาเป็นราคามาตรฐาน แก้ได้ก่อนส่งลูกค้า');
+    }
+
+    // ---------- payback method ----------
+    {
+      const s = pres.addSlide({ masterName: 'ST Content', sectionTitle: 'ข้อเสนอ' });
+      s.addText('วิธีคิดระยะเวลาคืนทุน', { placeholder: 'title' });
+      card(s, 0.5, 0.98, 9.0, 0.62, HEX.orangeSoft, 'Payback formula');
+      s.addText([
+        { text: 'คืนทุน  =  ', options: { bold: true, color: HEX.orange } },
+        { text: 'ปีที่เงินประหยัดสะสมเกินราคาระบบรวม VAT', options: { bold: true, color: C.text1, breakLine: true } },
+        { text: `เริ่มจากประหยัดปีแรก (ต่อเดือน × 12) แล้วทุกปีถัดไป แผงเสื่อม ${fmt1(D.deg * 100)}%/ปี · ค่าไฟขึ้น ${fmt1(D.infl * 100)}%/ปี${D.omAfter ? ` · หลังปีที่ ${D.wYears} หักค่าดูแล ฿${fmt(D.omAfter)}/ปี` : ''}`, options: { fontSize: 10, color: C.accent5 } }
+      ], { x: 0.7, y: 0.98, w: 8.6, h: 0.62, fontSize: 14, valign: 'middle', margin: 0, isTextBox: true, objectName: 'Payback formula text' });
+      const many = OPTS.length > 3;
+      const head = o => ({ text: [{ text: o.name, options: { bold: true, breakLine: true } }, { text: `${fk(o.kwp)} kWp${o.hyb ? ` · แบต ${fmt1(o.batt)} kWh` : ''}`, options: { fontSize: many ? 8 : 9 } }], options: { color: 'FFFFFF', fill: { color: o.hyb ? HEX.navy : HEX.orange }, align: 'center', valign: 'middle' } });
+      const lab = (t, sub) => ({ text: [{ text: t, options: { bold: true, color: HEX.ink2 } }, ...(sub ? [{ text: `  ${sub}`, options: { fontSize: many ? 8 : 9.5, color: HEX.grey } }] : [])] });
+      const cell = (f, hi) => OPTS.map(o => ({ text: f(o), options: { align: 'center', bold: !!hi, fill: { color: hi ? 'FFF6EF' : 'FFFFFF' } } }));
+      const N = { a: '(1)', b: '(2)', c: '(3)', d: '(4)', e: '(5)', f: '(6)' };
+      const rows = [
+        [{ text: '', options: { fill: { color: 'FFFFFF' } } }, ...OPTS.map(head)],
+        [lab(`${N.a} ค่าไฟก่อนติดตั้ง/เดือน`), ...cell(() => `฿${fmt(D.billNow)}`)],
+        [lab(`${N.b} ค่าไฟหลังติดตั้ง/เดือน`), ...cell(o => `฿${fmt(D.billNow - o.saveBill)}`)],
+        [lab(`${N.c} ประหยัดค่าไฟ/เดือน`, `${N.a} − ${N.b}`), ...cell(o => `฿${fmt(o.saveBill)}`)],
+        ...(D.sell ? [[lab(`${N.d} ขายไฟคืน/เดือน`, `${D.sellRate} บ./หน่วย`), ...cell(o => `฿${fmt(o.sellMo)}`)]] : []),
+        [lab(`${D.sell ? N.e : N.d} ประหยัดปีแรก`, D.sell ? `(${N.c} + ${N.d}) × 12` : `${N.c} × 12`), ...cell(o => `฿${fmt(o.save * 12)}`)],
+        [lab(`${D.sell ? N.f : N.e} ราคาระบบรวม VAT`), ...cell(o => `฿${fmt(o.cost)}`)],
+        [lab('คืนทุนแบบง่าย', D.sell ? `${N.f} ÷ ${N.e}` : `${N.e} ÷ ${N.d}`), ...cell(o => (o.save > 0 ? `${fmt(o.cost)} ÷ ${fmt(o.save * 12)} = ${fmt1(o.paybackSimple)} ปี` : '–'))],
+        [lab('คืนทุน', `แผงเสื่อม ${fmt1(D.deg * 100)}% · ค่าไฟขึ้น ${fmt1(D.infl * 100)}%/ปี`), ...OPTS.map(o => ({ text: [{ text: o.payback ? `${fmt1(o.payback)} ปี` : 'เกิน 25 ปี', options: { bold: true, color: HEX.ink, breakLine: true } }, { text: `สุทธิ 25 ปี ฿${fmt(o.y25)}`, options: { fontSize: many ? 8 : 9, color: HEX.grey } }], options: { align: 'center', fill: { color: 'FFF6EF' } } }))]
+      ];
+      const nr = rows.length - 1;
+      s.addTable(rows, { x: 0.5, y: 1.75, w: 9.0, colW: [many ? 2.2 : 2.9, ...OPTS.map(() => (many ? 6.8 : 6.1) / OPTS.length)], fontSize: many ? 9 : 11.5, color: HEX.ink, valign: 'middle', border: { type: 'solid', pt: 0.5, color: 'D9E1EF' }, rowH: [many ? 0.55 : 0.45, ...Array(nr - 1).fill(D.sell || many ? 0.27 : 0.31), 0.5], objectName: 'Payback calculation table' });
+      s.addText(`ค่าไฟหลังติดตั้งคำนวณรายชั่วโมงจากการใช้ไฟของบ้านและแดดแต่ละช่วงเวลา ไฟโซลาร์ใช้ในบ้านก่อน${HYB ? ' ส่วนเกินชาร์จแบตเตอรี่ไว้ใช้ตอนกลางคืน' : ''}${D.toTou && !D.tou ? ' คิดค่าไฟหลังติดตั้งด้วยมิเตอร์ TOU' : ''} · คืนทุนแบบง่ายใช้ประหยัดปีแรกคงที่ · คืนทุนจริงและกราฟ 25 ปีหน้าถัดไปคิดแผงเสื่อม ค่าไฟขึ้น และประกันแผง ${D.wYears} ปี`,
+        { x: 0.5, y: 4.78, w: 9.0, h: 0.42, fontSize: 9, color: C.accent5, margin: 0, valign: 'top', isTextBox: true, objectName: 'Payback note' });
+      s.addNotes(`ค่าไฟเฉลี่ย ${fk(D.T)} บาท/หน่วย · ผลิตไฟ ${D.Y} หน่วย/kWp/วัน · ตัวอย่าง: ${OPTS[0].name} ราคา ฿${fmt(OPTS[0].cost)} ÷ ประหยัดปีละ ฿${fmt(OPTS[0].save * 12)} = ${fmt1(OPTS[0].paybackSimple)} ปี (แบบง่าย) · คืนทุนจริง ${fmt1(OPTS[0].payback)} ปี`);
     }
 
     // ---------- 25-year value ----------
@@ -499,7 +566,7 @@
       s.addText('ความคุ้มค่าตลอด 25 ปี', { placeholder: 'title' });
       const yrs = Array.from({ length: 26 }, (_, i) => String(i));
       s.addChart(pres.charts.LINE, OPTS.map(o => ({ name: `${o.name} ${fk(o.kwp)} kWp`, labels: yrs, values: o.cum.map(v => Math.round(v / 1000)) })), ct({
-        x: 0.4, y: 1.0, w: 6.3, h: 4.05, chartColors: OCOL.slice(0, OPTS.length), lineSize: 2.5, lineDataSymbol: 'none', catAxisLabelFrequency: 5,
+        x: 0.4, y: 1.0, w: 6.3, h: 3.45, chartColors: OCOL.slice(0, OPTS.length), lineSize: 2.5, lineDataSymbol: 'none', catAxisLabelFrequency: 5,
         showCatAxisTitle: true, catAxisTitle: 'ปีที่', catAxisTitleFontSize: 9, catAxisTitleColor: HEX.grey, catAxisTitleFontFace: '+mn-lt', valAxisLabelFormatCode: '#,##0',
         showValAxisTitle: true, valAxisTitle: 'เงินสะสม (พันบาท)', valAxisTitleFontSize: 9, valAxisTitleColor: HEX.grey, valAxisTitleFontFace: '+mn-lt',
         showTitle: true, title: 'เงินที่ประหยัดสะสม หักค่าระบบแล้ว', titleFontSize: 12, titleColor: HEX.ink, titleFontFace: '+mn-lt', objectName: 'Cumulative savings chart'
@@ -511,16 +578,23 @@
         card(s, 6.95, y, 2.55, ch, SOFT[i], o.name + ' value card');
         s.addText(compact ? [
           { text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: 9.5, bold: true, color: OCOL[i], breakLine: true } },
-          { text: `คืนทุน ${fmt1(o.payback)} ปี`, options: { fontSize: 12, bold: true, color: C.text1 } },
+          { text: `คืนทุน ${o.payback ? fmt1(o.payback) + ' ปี' : 'เกิน 25 ปี'}`, options: { fontSize: 12, bold: true, color: C.text1 } },
           { text: `  ·  25 ปี ฿${fmt(o.y25)}`, options: { fontSize: 9, color: C.accent5 } }
         ] : [
           { text: `${o.name} ${fk(o.kwp)} kWp`, options: { fontSize: 12, bold: true, color: OCOL[i], breakLine: true } },
-          { text: `คืนทุน ${fmt1(o.payback)} ปี`, options: { fontSize: n === 3 ? 16 : 20, bold: true, color: C.text1, breakLine: true } },
+          { text: `คืนทุน ${o.payback ? fmt1(o.payback) + ' ปี' : 'เกิน 25 ปี'}`, options: { fontSize: n === 3 ? 16 : 20, bold: true, color: C.text1, breakLine: true } },
           { text: 'ประหยัดสุทธิ 25 ปี  ', options: { fontSize: 10, color: C.accent5, breakLine: n !== 3 } },
-          { text: `฿${fmt(o.y25)}`, options: { fontSize: n === 3 ? 12 : 16, bold: true, color: C.text1 } }
+          { text: `฿${fmt(o.y25)}`, options: { fontSize: n === 3 ? 12 : 16, bold: true, color: C.text1, breakLine: n < 3 } },
+          ...(n < 3 ? [{ text: `ถึงปีที่ ${Math.min(25, D.wYears)} (ช่วงประกัน) ฿${fmt(o.yW)}`, options: { fontSize: 9.5, color: C.accent5 } }] : [])
         ], { x: 7.1, y: y + (compact ? 0.05 : 0.1), w: 2.3, h: ch - (compact ? 0.1 : 0.2), valign: compact ? 'middle' : 'top', margin: 0, isTextBox: true });
       });
-      s.addNotes(`ประมาณการจากค่าไฟ ${D.T} บาท/หน่วย ผลิตไฟ ${D.Y} หน่วย/kWp/วัน แผงเสื่อม ${D.P.degradation * 100}%/ปี ${D.sell ? `รวมรายได้ขายไฟคืน ${D.sellRate} บาท/หน่วย` : 'ไม่รวมการขายไฟคืน'}`);
+      const W12 = Math.min(25, D.wYears);
+      card(s, 0.5, 4.55, 6.2, 0.55, HEX.blueSoft, 'Assumptions');
+      s.addText([
+        { text: 'สมมติฐาน  ', options: { bold: true, color: HEX.blue } },
+        { text: `แผงเสื่อม ${fmt1(D.deg * 100)}%/ปี · ค่าไฟขึ้น ${fmt1(D.infl * 100)}%/ปี${D.sell ? ' · ราคาขายไฟคงที่' : ''} · ปีที่ 1–${W12} อยู่ในประกันสินค้าแผง${D.omAfter ? ` · หลังปีที่ ${W12} คิดค่าดูแล ฿${fmt(D.omAfter)}/ปี` : ` · หลังปีที่ ${W12} หมดประกันสินค้า (ประกันประสิทธิภาพ 30 ปี)`}`, options: { color: C.text1 } }
+      ], { x: 0.65, y: 4.58, w: 5.95, h: 0.5, fontSize: 9.5, valign: 'middle', margin: 0, isTextBox: true, objectName: 'Assumptions text' });
+      s.addNotes(`ประมาณการจากค่าไฟ ${D.T.toFixed(2)} บาท/หน่วย (ขึ้น ${fmt1(D.infl * 100)}%/ปี) ผลิตไฟ ${D.Y} หน่วย/kWp/วัน แผงเสื่อม ${fmt1(D.deg * 100)}%/ปี ประกันสินค้าแผง ${D.wYears} ปี ${D.sell ? `รวมรายได้ขายไฟคืน ${D.sellRate} บาท/หน่วย` : 'ไม่รวมการขายไฟคืน'}`);
     }
 
     // ---------- equipment & warranty ----------
