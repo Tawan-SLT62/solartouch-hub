@@ -519,3 +519,5 @@ details.pb[open]>summary{margin-bottom:10px}
 details.pb .tbl-wrap{margin-bottom:8px}
 
 .mem-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.qt td.c-batt{min-width:150px}.qt td.c-batt select{width:auto;max-width:190px}
+tr.opt-off td.c-batt{opacity:1}

@@ -14,7 +14,11 @@
     panelW: 650,          // แผง N-type
     panelPrice: 4300,
     // แบตเตอรี่ที่มีขาย: ขนาด (kWh) และราคาต่อชุด
-    batteries: [{ kwh: 5, price: 55000 }, { kwh: 16.1, price: 150000 }],
+    // แบตเตอรี่แยกยี่ห้อ: ขนาดต่อชุด (kWh) ราคาต่อชุด (บาท) และต่อได้สูงสุดกี่ชุด
+    batteries: {
+      GoodWe: [{ kwh: 5, price: 55000, max: 4 }, { kwh: 16.1, price: 150000, max: 4 }],
+      Huawei: [{ kwh: 7, price: 77000, max: 6 }]   // 7, 14, 21, 28, 35, 42 kWh
+    },
     battDod: 0.9, battEff: 0.92,
     mountPerPanel: 950, protection: 9500, cables: 7500, laborPerKwp: 2500, engineering: 12000,
     hybridInvFactor: 1.35, vat: 0.07,
@@ -55,8 +59,13 @@
   const STD_INV = [3, 5, 6, 8, 10, 12, 15, 20, 25, 30];
   const invStd = (kw, hyb, P) => Math.round((kw <= 3 ? 28000 : kw <= 5 ? 36000 : kw <= 10 ? 62000 : 95000) * (hyb ? P.hybridInvFactor : 1));
   const invPrice = (kw, hyb, P, brand, phase) => { const t = (((P.invPrices || {})[phase] || {})[brand] || {})[hyb ? 'hybrid' : 'ongrid'] || {}; return t[kw] != null ? +t[kw] : invStd(kw, hyb, P); };
-  // [ชื่อ, ไฮบริด, ลำดับแบตเตอรี่ใน DEFAULTS.batteries]
-  const OPT_DEFS = [['On-Grid', false, -1, 'ongrid'], ['Hybrid', true, 0, 'hybrid'], ['Hybrid แบตใหญ่', true, 1, 'hybrid2']];
+  // [ชื่อ, ไฮบริด, ขนาดแบตตั้งต้นโดยประมาณ (kWh) ระบบเลือกขนาดที่ใกล้ที่สุดของยี่ห้อนั้น, key]
+  // ตัวเลือกขนาดแบต: แต่ละรุ่น × จำนวนชุด เช่น '0x2' = 5 kWh × 2 = 10 kWh
+  const battList = (P, brand) => (Array.isArray(P.batteries) ? P.batteries : (P.batteries[brand] || P.batteries[P.brand] || Object.values(P.batteries)[0]));
+  const battChoices = (over, brand) => { const P = Object.assign({}, DEFAULTS, over || {}); const out = [];
+    battList(P, brand).forEach((b, bi) => { for (let q = 1; q <= (b.max || P.battMaxQty || 1); q++) out.push({ id: bi + 'x' + q, bi, q, kwh: +(b.kwh * q).toFixed(2), price: b.price * q, label: q > 1 ? `${+(b.kwh * q).toFixed(2)} kWh (${b.kwh} × ${q})` : `${b.kwh} kWh` }); });
+    return out.sort((a, b) => a.kwh - b.kwh); };
+  const OPT_DEFS = [['On-Grid', false, 0, 'ongrid'], ['Hybrid', true, 5, 'hybrid'], ['Hybrid แบตใหญ่', true, 16, 'hybrid2']];
 
   /* ---------- calculation ---------- */
   // input: {phase, meter:'normal'|'tou', mode:'bill'|'units', bill, units, tariff, onUnits, offUnits, touOn, touOff, toTou, touMeterCost,
@@ -149,8 +158,14 @@
 
     // ปรับเองต่อ Option: จำนวนแผง (size) และราคารวม VAT (price) แยกตาม key เช่น 'hybrid|GoodWe'
     const SZ = i.size && typeof i.size === 'object' ? i.size : {}, PR = i.price && typeof i.price === 'object' ? i.price : {};
-    const build = (name, hyb, bi, forcePan, brand, key) => {
-      const B = hyb ? P.batteries[bi] : null, bk = B ? B.kwh : 0, nb = B ? 1 : 0;
+    const BT = i.batt && typeof i.batt === 'object' ? i.batt : {};
+    const build = (name, hyb, target, forcePan, brand, key) => {
+      // ขนาดแบต: ค่าเริ่มต้น = ขนาดของยี่ห้อนั้นที่ใกล้ target ที่สุด หรือที่เลือกเอง ('รุ่นxจำนวน')
+      const CH = hyb ? battChoices(over, brand) : [];
+      const def = hyb ? CH.reduce((a, c) => (Math.abs(c.kwh - target) < Math.abs(a.kwh - target) - 1e-9 ? c : a), CH[0]) : null;
+      const pick = hyb ? (CH.find(c => key && c.id === String(BT[key] || '')) || def) : null;
+      const B = pick ? battList(P, brand)[pick.bi] : null, nb = pick ? pick.q : 0, bk = pick ? pick.kwh : 0;
+      const defBatt = def ? def.id : '', battId = pick ? pick.id : '', customBatt = hyb && battId !== defBatt;
       const us = bk * P.battDod;
       const need = hyb ? (D.dD + Math.min(us, D.nD) / P.battEff) / Y : D.dD / Y;
       const recPan = Math.max(1, Math.ceil(need * 1000 / W - 1e-9));
@@ -172,7 +187,7 @@
       const items = [
         { d: `แผงโซลาร์ N-type ${W}W Bi-Facial (Tier 1)`, q: pan, u: 'แผง', p: P.panelPrice },
         { d: `อินเวอร์เตอร์ ${brand} ${hyb ? 'Hybrid' : 'On-Grid'} ${ik} kW ${phase} เฟส (อยู่ในบัญชีการไฟฟ้า)`, q: 1, u: 'เครื่อง', p: invPrice(ik, hyb, P, brand, phase) },
-        ...(B ? [{ d: `แบตเตอรี่ลิเธียม LFP ${bk} kWh`, q: 1, u: 'ชุด', p: B.price }] : []),
+        ...(B ? [{ d: `แบตเตอรี่ลิเธียม LFP ${brand} ${B.kwh} kWh`, q: nb, u: 'ชุด', p: B.price }] : []),
         ...(meterCost ? [{ d: 'ค่าเปลี่ยนเป็นมิเตอร์ TOU (ชำระการไฟฟ้า)', q: 1, u: 'งาน', p: meterCost }] : []),
         { d: 'รางอะลูมิเนียมและอุปกรณ์ยึดหลังคา', q: pan, u: 'ชุด', p: P.mountPerPanel },
         { d: 'ตู้ DC/AC Protection (เบรกเกอร์ / Surge / ฟิวส์)', q: 1, u: 'ตู้', p: P.protection },
@@ -194,7 +209,7 @@
       }
       const saveR = Math.round(save), costR = Math.round(cost);
       return {
-        name, hyb, nb, need: +need.toFixed(2), batt: bk, pan, kwp: +kwp.toFixed(2), inv: ik, brand, capped, dcac: +(kwp / ik).toFixed(2),
+        name, hyb, nb, need: +need.toFixed(2), batt: bk, battId, defBatt, customBatt, pan, kwp: +kwp.toFixed(2), inv: ik, brand, capped, dcac: +(kwp / ik).toFixed(2),
         recPan, recKwp: +(recPan * W / 1000).toFixed(2), customSize: !!userPan, customPrice: !!userCost,
         stdCost: Math.round(costStd), adj: +(ex - exStd).toFixed(2),
         prodMo: Math.round(prod * 30), prodYr: Math.round(prod * 365), save: saveR, saveBill: Math.round(saveBill), sellMo: Math.round(sellMo), exportMo: Math.round(exportD * 30), pct: Math.round(saveBill / bill * 100),
@@ -565,8 +580,9 @@
       const s = pres.addSlide({ masterName: 'ST Content', sectionTitle: 'ข้อเสนอ' });
       s.addText('ความคุ้มค่าตลอด 25 ปี', { placeholder: 'title' });
       const yrs = Array.from({ length: 26 }, (_, i) => String(i));
-      s.addChart(pres.charts.LINE, OPTS.map(o => ({ name: `${o.name} ${fk(o.kwp)} kWp`, labels: yrs, values: o.cum.map(v => Math.round(v / 1000)) })), ct({
-        x: 0.4, y: 1.0, w: 6.3, h: 3.45, chartColors: OCOL.slice(0, OPTS.length), lineSize: 2.5, lineDataSymbol: 'none', catAxisLabelFrequency: 5,
+      s.addChart(pres.charts.BAR, OPTS.map(o => ({ name: `${o.name} ${fk(o.kwp)} kWp`, labels: yrs, values: o.cum.map(v => Math.round(v / 1000)) })), ct({
+        x: 0.4, y: 1.0, w: 6.3, h: 3.45, barDir: 'col', barGrouping: 'clustered', barGapWidthPct: OPTS.length > 1 ? 40 : 60, barOverlapPct: 0,
+        chartColors: OCOL.slice(0, OPTS.length), catAxisLabelFrequency: 2,
         showCatAxisTitle: true, catAxisTitle: 'ปีที่', catAxisTitleFontSize: 9, catAxisTitleColor: HEX.grey, catAxisTitleFontFace: '+mn-lt', valAxisLabelFormatCode: '#,##0',
         showValAxisTitle: true, valAxisTitle: 'เงินสะสม (พันบาท)', valAxisTitleFontSize: 9, valAxisTitleColor: HEX.grey, valAxisTitleFontFace: '+mn-lt',
         showTitle: true, title: 'เงินที่ประหยัดสะสม หักค่าระบบแล้ว', titleFontSize: 12, titleColor: HEX.ink, titleFontFace: '+mn-lt', objectName: 'Cumulative savings chart'
@@ -730,7 +746,7 @@
     return postProcess(raw, JSZip);
   }
 
-  const api = { DEFAULTS, calc, buildDeck, postProcess, makePptx };
+  const api = { DEFAULTS, calc, buildDeck, postProcess, makePptx, battChoices };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ST_PROPOSAL = api;
 })(typeof window !== 'undefined' ? window : globalThis);
